@@ -186,12 +186,10 @@ def plot_results(res: IntersectionResult,
                  auto_view: bool = True,
                  elev_default: float = 22,
                  azim_default: float = 35,
-                 draw_wolf_fill: bool = False,
                  figsize: tuple = (13, 9),
-                 # ---- nouveaux paramètres de clipping
-                 clip_tube2_at_cyl1: bool = True,     # coupe le cylindre incliné au niveau de l'intersection
-                 clip_side: str = "outside",          # "outside" pour ne garder que l'extérieur du cylindre 1
-                 clip_eps: float = 1e-9):             # marge numérique
+                 clip_tube2_at_cyl1: bool = True,
+                 clip_side: str = "outside",
+                 clip_eps: float = 1e-9):
     import numpy as np
     import matplotlib.pyplot as plt
     import matplotlib.gridspec as gridspec
@@ -201,7 +199,7 @@ def plot_results(res: IntersectionResult,
     if valid_pts.size == 0:
         raise RuntimeError("Pas de points d'intersection valides : ajustez R1, R2, phi.")
 
-    # Bornes géométriques
+    # --- bornes géométriques
     x_min, y_min, z_min = valid_pts.min(axis=0)
     x_max, y_max, z_max = valid_pts.max(axis=0)
     t_valid = res.t[res.valid_mask]
@@ -211,44 +209,41 @@ def plot_results(res: IntersectionResult,
     pad_z = pad_factor * max(z_max - z_min, diag)
     pad_t = pad_factor * max(tmax - tmin, diag)
 
-    # Maillages cylindres
+    # --- maillages
     th = np.linspace(0, 2*np.pi, n_ang)
     zc = np.linspace(z_min - pad_z, z_max + pad_z, n_ax)
     TH, ZC = np.meshgrid(th, zc)
 
-    # Cylindre 1 (vertical)
-    X1 = R1*np.cos(TH);  Y1 = R1*np.sin(TH);  Z1 = ZC
+    # cylindre 1
+    X1 = R1*np.cos(TH); Y1 = R1*np.sin(TH); Z1 = ZC
 
-    # Cylindre 2 (incliné – rotation Rx(phi))
+    # cylindre 2 incliné (Rx(phi))
     s, c = np.sin(phi), np.cos(phi)
     TT, ZZ = np.meshgrid(th, np.linspace(tmin - pad_t, tmax + pad_t, n_ax))
     X2 = R2*np.cos(TT)
     Y2 = R2*np.sin(TT)*c - ZZ*s
     Z2 = R2*np.sin(TT)*s + ZZ*c
 
-    # --- CLIPPING : on ne dessine le cylindre 2 que jusqu'à l'intersection avec le cylindre 1
-    # On utilise des masked arrays pour que plot_surface supprime les faces masquées.
+    # clipping visuel du cylindre 2
     if clip_tube2_at_cyl1:
         r2_sq = X2**2 + Y2**2
-        if clip_side.lower() == "outside":   # garder l'extérieur du cylindre 1
+        if clip_side.lower() == "outside":
             mask = r2_sq < (R1**2 - clip_eps)
-        elif clip_side.lower() == "inside":  # garder l'intérieur du cylindre 1
+        elif clip_side.lower() == "inside":
             mask = r2_sq > (R1**2 + clip_eps)
         else:
             raise ValueError("clip_side doit valoir 'outside' ou 'inside'")
-        X2 = np.ma.array(X2, mask=mask)
-        Y2 = np.ma.array(Y2, mask=mask)
-        Z2 = np.ma.array(Z2, mask=mask)
+        X2, Y2, Z2 = np.ma.array(X2, mask=mask), np.ma.array(Y2, mask=mask), np.ma.array(Z2, mask=mask)
 
-    # Figure
+    # --- figure
     fig = plt.figure(figsize=figsize)
     fig.set_constrained_layout(True)
     gs = gridspec.GridSpec(2, 2, width_ratios=[1.1, 1.0], height_ratios=[1, 1],
                            wspace=0.25, hspace=0.22)
 
-    # ---- 3D à gauche
+    # 3D
     ax3d = fig.add_subplot(gs[:, 0], projection='3d')
-    ax3d.plot_surface(X1, Y1, Z1, alpha=alpha_blue,   color="#7ec8e3", linewidth=0)
+    ax3d.plot_surface(X1, Y1, Z1, alpha=alpha_blue, color="#7ec8e3", linewidth=0)
     ax3d.plot_surface(X2, Y2, Z2, alpha=alpha_orange, color="#f0a35e", linewidth=0)
 
     pts = valid_pts
@@ -258,13 +253,10 @@ def plot_results(res: IntersectionResult,
     yr = (y_min - diag, y_max + diag)
     zr = (z_min - pad_z, z_max + pad_z)
     ax3d.set_xlim(*xr); ax3d.set_ylim(*yr); ax3d.set_zlim(*zr)
-
     ax3d.set_title(f"{title_prefix}Intersection 3D\nR1={R1}, R2={R2}, phi={phi:.3f} rad")
     ax3d.set_xlabel("x"); ax3d.set_ylabel("y"); ax3d.set_zlabel("z")
-    ax3d.set_box_aspect([1,1,1])
-    ax3d.legend(loc="upper left")
+    ax3d.set_box_aspect([1,1,1]); ax3d.legend(loc="upper left")
 
-    # Vue automatique centrée sur l'intersection
     if auto_view:
         cx, cy, cz = pts.mean(axis=0)
         azim = np.degrees(np.arctan2(cy, cx)) + 35.0
@@ -273,7 +265,7 @@ def plot_results(res: IntersectionResult,
     else:
         ax3d.view_init(elev=elev_default, azim=azim_default)
 
-    # ---- Développé sur cylindre 2 (haut droite)
+    # Développé cylindre 2 (haut droite)
     ax2_top = fig.add_subplot(gs[0, 1])
     uv2 = res.uv[res.valid_mask]
     ax2_top.plot(uv2[:,0], uv2[:,1], lw=2, color="red")
@@ -282,19 +274,19 @@ def plot_results(res: IntersectionResult,
     ax2_top.set_ylabel("v₂ = t (axe cyl. 2)")
     ax2_top.grid(True, linestyle=':')
 
-    # ---- Développé sur cylindre 1 (bas droite) – « gueule de loup »
+    # Développé cylindre 1 (bas droite) — CONTOUR UNIQUEMENT
     ax2_bot = fig.add_subplot(gs[1, 1])
     u1, v1 = unwrap_on_cylinder1(res, R1)
-    if draw_wolf_fill:
-        ax2_bot.fill(u1, v1, color="red", alpha=0.25, linewidth=0)
-    ax2_bot.plot(u1, v1, lw=2, color="red")
+    # on trace un contour fermé SANS remplissage
+    u_out = np.r_[u1, u1[0]]
+    v_out = np.r_[v1, v1[0]]
+    ax2_bot.plot(u_out, v_out, lw=2, color="red")
     ax2_bot.set_title("Développé sur cylindre 1 (vertical) – « gueule de loup »")
     ax2_bot.set_xlabel("u₁ = R1·α (longueur déroulée)")
     ax2_bot.set_ylabel("v₁ = z (axe cyl. 1)")
     ax2_bot.grid(True, linestyle=':')
 
     plt.show()
-
 
 # ============================
 # Exemple d'exécution
@@ -303,8 +295,8 @@ def plot_results(res: IntersectionResult,
 if __name__ == "__main__":
     # Paramètres
     R1 = 1.0                 # rayon cylindre 1 (vertical)
-    R2 = 1                 # rayon cylindre 2 (incliné)
-    phi = np.deg2rad(45.0)   # angle d'inclinaison autour de l'axe x (en radians)
+    R2 = 1.0                # rayon cylindre 2 (incliné)
+    phi = np.deg2rad(90.0)   # angle d'inclinaison autour de l'axe x (en radians)
     branch = "outer"         # "outer" ou "inner" (choix de la racine)
 
     # Calcul de l'intersection
@@ -312,8 +304,7 @@ if __name__ == "__main__":
 
     # Visualisation : 3D + deux développés
     plot_results(res, R1, R2, phi, alpha_blue=0.8, alpha_orange=0.25,
-             auto_view=True, draw_wolf_fill=False)
-
+             auto_view=True)
 
     # Exports CSV
     export_csv_cyl2(res, "gabarit_cylindre2.csv")
