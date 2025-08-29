@@ -45,8 +45,8 @@ avec
 
 $$
 \begin{aligned}
-a &= \sin^2\phi,\\[2pt]
-b(\theta) &= -\,2\,R_2\,\sin\theta\,\cos\phi\,\sin\phi,\\[2pt]
+a &= \sin^2\phi,\\
+b(\theta) &= -\,2\,R_2\,\sin\theta\,\cos\phi\,\sin\phi,\\
 c_0(\theta) &= R_2^2\!\big(\cos^2\theta+\sin^2\theta\,\cos^2\phi\big)-R_1^2.
 \end{aligned}
 $$
@@ -82,7 +82,7 @@ où $t_\star$ désigne l’une des deux branches $t_\pm$.
 
 **(ii) « Gueule de loup » sur le cylindre vertical**
 
-On passe en cylindriques du cylindre 1 : $\alpha=\operatorname{atan2}(y,x)$ et $z=z$, puis
+On passe en cylindriques du cylindre 1 : $\alpha=\mathrm{atan2}(y,x)$ et $z=z$, puis
 
 $$
 (u_1,v_1)=\big(R_1\,\alpha^\uparrow,\ z\big),
