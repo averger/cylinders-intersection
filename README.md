@@ -9,49 +9,49 @@
 ## 1) Théorie (version courte mais complète)
 
 ### Modèle géométrique
-- Repère orthonormé \((x,y,z)\).
-- **Cylindre 1** (*vertical*), axe \(Oz\), rayon \(R_1>0\) :  
-  \[ x^2 + y^2 = R_1^2. \]
-- **Cylindre 2** (*incliné*), rayon \(R_2>0\), obtenu par rotation d’angle \(\phi\) autour de l’axe \(x\) d’un cylindre initialement coaxial à \(Oz\).  
-  Paramétrisation **avant** rotation : \((R_2\cos\theta,\ R_2\sin\theta,\ t)\).  
-  **Après** rotation \(R_x(\phi)\) :
-  \[
+- Repère orthonormé $(x,y,z)$.
+- **Cylindre 1** (*vertical*), axe $Oz$, rayon $R_1>0$ :  
+  $$x^2 + y^2 = R_1^2.$$
+- **Cylindre 2** (*incliné*), rayon $R_2>0$, obtenu par rotation d’angle $\phi$ autour de l’axe $x$ d’un cylindre initialement coaxial à $Oz$.  
+  Paramétrisation **avant** rotation : $(R_2\cos\theta,\ R_2\sin\theta,\ t)$.  
+  **Après** rotation $R_x(\phi)$ :
+  $$
   \begin{aligned}
   x(\theta,t) &= R_2\cos\theta,\\
   y(\theta,t) &= R_2\sin\theta\cos\phi - t\sin\phi,\\
   z(\theta,t) &= R_2\sin\theta\sin\phi + t\cos\phi.
   \end{aligned}
-  \]
+  $$
 
-### Condition d’intersection et équation en \(t\)
-Un point du cylindre 2 appartient au cylindre 1 ssi \(x^2(\theta,t)+y^2(\theta,t)=R_1^2\).  
-On obtient, pour chaque \(\theta\in[0,2\pi)\), un **quadratique en \(t\)** :
-\[ a\,t^2 + b(\theta)\,t + c_0(\theta)=0, \]
+### Condition d’intersection et équation en $t$
+Un point du cylindre 2 appartient au cylindre 1 ssi $x^2(\theta,t)+y^2(\theta,t)=R_1^2$.  
+On obtient, pour chaque $\theta\in[0,2\pi)$, un **quadratique en $t$** :
+$$a\,t^2 + b(\theta)\,t + c_0(\theta)=0,$$
 avec
-\[
+$$
 a=\sin^2\phi,\qquad
 b(\theta)=-2R_2\sin\theta\cos\phi\sin\phi,\qquad
 c_0(\theta)=R_2^2\!\left(\cos^2\theta+\sin^2\theta\cos^2\phi\right)-R_1^2.
-\]
-Le **discriminant** \(\Delta(\theta)=b^2-4ac_0\) décide de l’existence de solutions réelles. Dès qu’il existe des \(\theta\) avec \(\Delta\ge 0\), les deux surfaces se coupent.
+$$
+Le **discriminant** $\Delta(\theta)=b^2-4ac_0$ décide de l’existence de solutions réelles. Dès qu’il existe des $\theta$ avec $\Delta\ge 0$, les deux surfaces se coupent.
 
 Les solutions sont
-\[
+$$
 t_\pm(\theta)=\frac{-b(\theta)\pm\sqrt{\Delta(\theta)}}{2a}\quad(\phi\not\equiv0).
-\]
+$$
 
 ### Deux branches (« outer » / « inner »)
-Pour une génératrice donnée (\(\theta\) fixé), il y a en général **deux points** d’intersection — « entrée »/« sortie ». En balayant \(\theta\), cela engendre **deux courbes**.  
-Dans le code, je choisis l’une des deux via `branch="outer"` (racine \(+\)) ou `branch="inner"` (racine \(-\)). **En fabrication**, on n’utilise généralement **qu’une seule lèvre** (souvent `outer`).
+Pour une génératrice donnée ($\theta$ fixé), il y a en général **deux points** d’intersection — « entrée »/« sortie ». En balayant $\theta$, cela engendre **deux courbes**.  
+Dans le code, je choisis l’une des deux via `branch="outer"` (racine $+$) ou `branch="inner"` (racine $-$). **En fabrication**, on n’utilise généralement **qu’une seule lèvre** (souvent `outer`).
 
 ### Développés (mises à plat)
-Le développement isométrique d’un cylindre de rayon \(R\) se fait via \((u,v)=(R\theta,\ v)\). On en déduit :
+Le développement isométrique d’un cylindre de rayon $R$ se fait via $(u,v)=(R\theta,\ v)$. On en déduit :
 - **Gabarit sur le cylindre incliné (tube à couper)**  
-  \[(u_2(\theta),v_2(\theta))=\big(R_2\theta,\ t_\star(\theta)\big).\]
+  $$(u_2(\theta),v_2(\theta))=\big(R_2\theta,\ t_\star(\theta)\big).$$
 - **« Gueule de loup » sur le cylindre vertical**  
-  On passe en cylindriques du cylindre 1 : \(\alpha=\mathrm{atan2}(y,x)\), \(z=z\), puis  
-  \[(u_1,v_1)=\big(R_1\,\alpha^\uparrow,\ z\big),\]  
-  où \(\alpha^\uparrow\) signifie *unwrap* (suppression du saut à \(2\pi\)).
+  On passe en cylindriques du cylindre 1 : $\alpha=\mathrm{atan2}(y,x)$, $z=z$, puis  
+  $$(u_1,v_1)=\big(R_1\,\alpha^\uparrow,\ z\big),$$  
+  où $\alpha^\uparrow$ signifie *unwrap* (suppression du saut à $2\pi$).
 
 > Ces deux courbes 2D, **à l’échelle 1**, servent de gabarits : l’une pour **découper** le tube incliné, l’autre pour **présenter** le tube vertical (contact type « fish-mouth »).
 
@@ -76,7 +76,7 @@ Le fichier s’appelle par exemple `tubes_intersection_and_unwrap_v2.py`. Les po
 - `R1` : rayon du **cylindre 1** (vertical).  
 - `R2` : rayon du **cylindre 2** (incliné).  
 - `phi` : **angle d’inclinaison** (en radians) autour de **x**. Exemple : `np.deg2rad(30)`.  
-- `branch` : `"outer"` (racine \(+\)) ou `"inner"` (racine \(-\)). Choisir la lèvre utile pour la coupe.
+- `branch` : `"outer"` (racine $+$) ou `"inner"` (racine $-$). Choisir la lèvre utile pour la coupe.
 
 ### Options d’affichage utiles (dans `plot_results`)
 - `alpha_blue` / `alpha_orange` : transparence des surfaces (visibilité).  
@@ -106,13 +106,13 @@ export_csv_both(res, R1, "gabarits_developpes.csv")
 ```
 
 ### Fichiers générés
-- `gabarit_cylindre2.csv` : \((u_2,v_2)\) + points 3D — **gabarit du tube incliné**.  
-- `gabarits_developpes.csv` : colonnes \((u_1,v_1)\) **gueule de loup** et \((u_2,v_2)\) **gabarit tube 2** (rééchantillonné).
+- `gabarit_cylindre2.csv` : $(u_2,v_2)$ + points 3D — **gabarit du tube incliné**.  
+- `gabarits_developpes.csv` : colonnes $(u_1,v_1)$ **gueule de loup** et $(u_2,v_2)$ **gabarit tube 2** (rééchantillonné).
 
 ### Conseils atelier
 - Les courbes sont **lignes neutres** : prévoir un **jeu** si besoin (offset en DAO).  
 - Unités libres mais cohérentes (mm recommandé).  
-- Pour DXF/SVG : convertir la polyline \((u,v)\) en spline si exigé par la machine.
+- Pour DXF/SVG : convertir la polyline $(u,v)$ en spline si exigé par la machine.
 
 ---
 
