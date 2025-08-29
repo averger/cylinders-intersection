@@ -130,13 +130,6 @@ export_csv_both(res, R1, "gabarits_developpes.csv")
 - `gabarit_cylindre2.csv` : $(u_2,v_2)$ + points 3D — **gabarit du tube incliné**.  
 - `gabarits_developpes.csv` : colonnes $(u_1,v_1)$ **gueule de loup** et $(u_2,v_2)$ **gabarit tube 2** (rééchantillonné).
 
-### Conseils atelier
-- Les courbes sont **lignes neutres** : prévoir un **jeu** si besoin (offset en DAO).  
-- Unités libres mais cohérentes (mm recommandé).  
-- Pour DXF/SVG : convertir la polyline $(u,v)$ en spline si exigé par la machine.
-
 ---
-
-*Fin du document — prêt à publier / versionner.*
 
 — **A. Verger**
