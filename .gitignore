@@ -1,0 +1,11 @@
+target/
+**/*.rs.bk
+*.pdb
+
+web/node_modules/
+web/dist/
+web/.vite/
+web/.svelte-kit/
+
+.DS_Store
+*.log
