@@ -114,12 +114,10 @@
   <footer class="border-t border-white/5 mt-12">
     <div class="max-w-[1600px] mx-auto px-6 lg:px-10 py-8 flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between text-[11px] text-ash">
       <div>
-        Moteur Rust + Axum &middot; UI Svelte 5 + Tailwind 4 &middot;
+        Moteur Rust + Tauri &middot; UI Svelte 5 + Tailwind 4 &middot;
         rendu Three.js
       </div>
       <div class="flex items-center gap-4">
-        <a href="/api/health" class="hover:text-pearl transition" target="_blank" rel="noopener">/api/health</a>
-        <span>—</span>
         <span>tout est calculé en local sur votre machine.</span>
       </div>
     </div>

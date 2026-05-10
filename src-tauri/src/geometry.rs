@@ -31,7 +31,6 @@ impl Default for Branch {
     }
 }
 
-/// 3D point used for plotting and SVG export.
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct Point3 {
     pub x: f64,
@@ -45,7 +44,6 @@ impl From<Vector3<f64>> for Point3 {
     }
 }
 
-/// Rotation matrix around the `Ox` axis by `phi` radians.
 #[inline]
 pub fn rot_x(phi: f64) -> Matrix3<f64> {
     let (s, c) = phi.sin_cos();
@@ -56,7 +54,6 @@ pub fn rot_x(phi: f64) -> Matrix3<f64> {
     )
 }
 
-/// Forward parameterisation of cylinder 2 (radius `r2`, tilted by `phi`).
 #[inline]
 pub fn cyl2_point(r2: f64, phi: f64, theta: f64, t: f64) -> Vector3<f64> {
     let (sp, cp) = phi.sin_cos();
@@ -68,7 +65,6 @@ pub fn cyl2_point(r2: f64, phi: f64, theta: f64, t: f64) -> Vector3<f64> {
     )
 }
 
-/// Standardised summary of the bounding box of a list of 2D points.
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct BBox2 {
     pub u_min: f64,
@@ -95,7 +91,6 @@ impl BBox2 {
     pub fn height(&self) -> f64 { self.v_max - self.v_min }
 }
 
-/// Numerically-robust `unwrap` of an angle sequence (analogous to `numpy.unwrap`).
 pub fn unwrap_angles(alphas: &[f64]) -> Vec<f64> {
     if alphas.is_empty() {
         return Vec::new();
@@ -121,3 +116,6 @@ pub fn unwrap_angles(alphas: &[f64]) -> Vec<f64> {
     }
     out
 }
+
+#[allow(dead_code)]
+pub fn _force_use_rot_x() -> Matrix3<f64> { rot_x(0.0) }

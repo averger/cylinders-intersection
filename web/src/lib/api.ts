@@ -1,3 +1,5 @@
+import { invoke } from "@tauri-apps/api/core";
+
 export type Branch = "outer" | "inner";
 
 export interface DevPoint {
@@ -49,28 +51,18 @@ export interface CylPlaneInput {
   n_samples?: number;
 }
 
-async function postJSON<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
-    try {
-      const j = await res.json();
-      if (j && typeof j === "object" && "error" in j) msg = String(j.error);
-    } catch {
-      /* ignore */
-    }
+async function call<T>(cmd: string, input: unknown): Promise<T> {
+  try {
+    return await invoke<T>(cmd, { input });
+  } catch (err: unknown) {
+    const msg = typeof err === "string" ? err : err instanceof Error ? err.message : String(err);
     throw new Error(msg);
   }
-  return (await res.json()) as T;
 }
 
 export const api = {
   cylCyl: (input: CylCylInput) =>
-    postJSON<IntersectionPayload>("/api/intersect/cyl-cyl", input),
+    call<IntersectionPayload>("intersect_cyl_cyl", input),
   cylPlane: (input: CylPlaneInput) =>
-    postJSON<IntersectionPayload>("/api/intersect/cyl-plane", input),
+    call<IntersectionPayload>("intersect_cyl_plane", input),
 };

@@ -1,6 +1,6 @@
 # Intersection de deux cylindres inclinés — théorie & mode d’emploi
 
-*Document de référence rédigé pour expliquer la géométrie et l’usage du script Python (et de la webapp Streamlit) de génération des gabarits (développés) d’intersection de deux cylindres.*
+*Document de référence rédigé pour expliquer la géométrie et l’usage de l’application desktop Tauri (Rust + Svelte) de génération des gabarits (développés) d’intersection de deux cylindres. Le script Python original reste fourni en référence.*
 
 — **A. Verger**
 
@@ -106,14 +106,15 @@ où $\alpha^\uparrow$ est l’angle **déroulé** (*unwrap*) pour supprimer le s
 
 ---
 
-## 2) Webapp Rust + Svelte (gabarits 1 : 1)
+## 2) Application desktop Tauri + Rust + Svelte (gabarits 1 : 1)
 
-L’implémentation de référence est désormais une application autonome — moteur géométrique en **Rust** (Axum + nalgebra), interface **Svelte 5 + Tailwind 4** servie en SPA, vue 3D **Three.js**.
+L’implémentation de référence est désormais une **application desktop** packagée avec **Tauri 2** — moteur géométrique **Rust + nalgebra**, interface **Svelte 5 + Tailwind 4**, vue 3D **Three.js**. Plus de serveur HTTP : les calculs sont exposés directement sous forme de commandes `invoke` consommées par le frontend.
 
-* Calcul matriciel côté serveur (binaire compilé).
+* Calcul matriciel côté Rust (commande Tauri, zéro réseau).
 * Choix entre **cylindre × cylindre** et **cylindre × plan incliné**.
 * Export **SVG vectoriel à l’échelle 1 : 1** et **CSV** brut pour CNC / laser / découpe plasma.
 * Mode impression dédié, avec règle de référence 100 mm pour vérifier le scaling de l’imprimante.
+* Bundles natifs Windows (`.msi`, `.exe`), macOS (`.dmg`, `.app`) et Linux (`.deb`, `.AppImage`, `.rpm`).
 
 ### 2.1 Pré-requis
 
@@ -122,41 +123,51 @@ L’implémentation de référence est désormais une application autonome — m
 | Rust        | 1.94 +         |
 | Node        | 22 +           |
 | npm         | 10 +           |
+| Tauri CLI   | 2.x (installé via `npm i`) |
+
+Dépendances système Linux (Ubuntu/Debian) : `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `libsoup-3.0-dev`, `pkg-config`. Sur macOS : Xcode Command Line Tools. Sur Windows : Microsoft C++ Build Tools + WebView2 (préinstallé sur Windows 11).
 
 ### 2.2 Build complet
 
 ```bash
-# 1) compiler la SPA (génère web/dist, embarquée dans le binaire)
-cd web && npm install && npm run build && cd ..
+# 1) installer les dépendances frontend (inclut le CLI Tauri)
+cd web && npm install && cd ..
 
-# 2) compiler le binaire Rust (statique, ~15 Mo en release)
-cargo build --release
-
-# 3) lancer
-./target/release/cylinders-intersection --port 8787
-# puis ouvrir http://127.0.0.1:8787
+# 2) compiler l'app desktop (déclenche automatiquement npm run build sur la SPA)
+cd web && npm run tauri:build
+# bundles produits dans src-tauri/target/release/bundle/
 ```
 
-Le binaire accepte aussi `--host 0.0.0.0` pour écouter sur l’ensemble des interfaces (utile en LAN).
+Le binaire seul (sans installateur) reste disponible dans `src-tauri/target/release/`.
 
 ### 2.3 Développement
 
 ```bash
-# terminal 1 — backend Rust
-cargo run --release -- --port 8787
-
-# terminal 2 — frontend en hot-reload, proxy /api -> :8787
-cd web && npm run dev
-# Vite démarre sur http://127.0.0.1:5173
+cd web && npm run tauri:dev
+# Vite démarre sur http://127.0.0.1:5173 (hot-reload Svelte)
+# Tauri lance simultanément la fenêtre native et y branche le dev server
 ```
 
-### 2.4 Endpoints HTTP
+> Note : `tauri:dev` orchestre déjà le frontend Vite via `beforeDevCommand` (cf. `src-tauri/tauri.conf.json`) — pas besoin de second terminal.
 
-| Méthode | Route                          | Corps                                              | Réponse                |
-|---------|--------------------------------|----------------------------------------------------|------------------------|
-| `GET`   | `/api/health`                  | —                                                  | `{name, version, uptime_ms}` |
-| `POST`  | `/api/intersect/cyl-cyl`       | `{r1, r2, phi, n_samples?, branch?}`               | `IntersectionPayload`  |
-| `POST`  | `/api/intersect/cyl-plane`     | `{r1, phi, z0?, n_samples?}`                       | `IntersectionPayload`  |
+Pour tester uniquement le frontend dans le navigateur (sans Tauri), `npm run dev` reste utilisable, mais les appels `invoke` échoueront hors du runtime Tauri.
+
+### 2.4 Commandes Tauri
+
+L’ancienne API HTTP (Axum) a été remplacée par deux **commandes Tauri** invoquées depuis le frontend via `@tauri-apps/api`.
+
+| Commande Rust            | Argument             | Réponse              |
+|--------------------------|----------------------|----------------------|
+| `intersect_cyl_cyl`      | `CylCylInput`        | `IntersectionPayload` |
+| `intersect_cyl_plane`    | `CylPlaneInput`      | `IntersectionPayload` |
+
+```ts
+import { invoke } from "@tauri-apps/api/core";
+
+const res = await invoke("intersect_cyl_cyl", {
+  input: { r1: 50, r2: 35, phi: Math.PI / 4, n_samples: 1440, branch: "outer" },
+});
+```
 
 `IntersectionPayload` :
 
@@ -178,14 +189,7 @@ cd web && npm run dev
 * Les angles sont en **radians**.
 * `branch ∈ {"outer", "inner"}` choisit la racine $t_\pm$ (cf. §1).
 * `dev_main` n’est renvoyé qu’en mode `cyl_cyl`.
-
-Exemple de requête `curl` :
-
-```bash
-curl -s -X POST http://127.0.0.1:8787/api/intersect/cyl-cyl \
-  -H 'Content-Type: application/json' \
-  -d '{"r1": 50, "r2": 35, "phi": 0.7853981633974483, "n_samples": 1440, "branch": "outer"}'
-```
+* Les erreurs de validation reviennent sous forme de `Promise.reject(string)` — interceptées par `web/src/lib/api.ts`.
 
 ### 2.5 Impression 1 : 1
 
@@ -204,35 +208,40 @@ Exports disponibles depuis chaque carte :
 
 ```
 cylinders-intersection/
-├── Cargo.toml              # crate cylinders-intersection
-├── src/
-│   ├── geometry.rs         # rotation X, paramétrisation cyl-2, BBox, unwrap
-│   ├── intersection.rs     # cyl/cyl + cyl/plan + développés (gueule de loup)
-│   ├── api.rs              # routes Axum + SPA fallback
-│   ├── assets.rs           # rust-embed sur web/dist
-│   ├── lib.rs              # re-exports
-│   └── main.rs             # serveur Axum (CLI clap)
-└── web/                    # SPA (Svelte 5 + Tailwind 4 + Three.js)
-    ├── src/
-    │   ├── App.svelte
-    │   ├── main.ts
-    │   ├── app.css
-    │   ├── components/
-    │   │   ├── Header.svelte
-    │   │   ├── Hero.svelte
-    │   │   ├── ControlPanel.svelte
-    │   │   ├── Viewer3D.svelte         # rendu Three.js
-    │   │   ├── DevelopedView.svelte    # SVG mm interactif
-    │   │   ├── PrintLayout.svelte      # rendu impression 1:1
-    │   │   ├── Slider.svelte
-    │   │   └── Segmented.svelte
-    │   └── lib/
-    │       ├── api.ts
-    │       ├── store.svelte.ts
-    │       └── svg.ts
+├── src-tauri/                  # crate Tauri (anciennement Axum)
+│   ├── Cargo.toml
+│   ├── tauri.conf.json         # config bundle, fenêtre, beforeDev/Build
+│   ├── build.rs
+│   ├── capabilities/
+│   │   └── default.json        # permissions de la fenêtre principale
+│   ├── icons/                  # icônes (PNG/ICO/ICNS)
+│   └── src/
+│       ├── geometry.rs         # rotation X, paramétrisation cyl-2, BBox, unwrap
+│       ├── intersection.rs     # cyl/cyl + cyl/plan + développés (gueule de loup)
+│       ├── lib.rs              # commandes Tauri + run()
+│       └── main.rs             # entrée binaire native
+└── web/                        # SPA (Svelte 5 + Tailwind 4 + Three.js)
+    ├── package.json            # scripts tauri:dev / tauri:build
     ├── vite.config.ts
     ├── tsconfig.json
-    └── index.html
+    ├── index.html
+    └── src/
+        ├── App.svelte
+        ├── main.ts
+        ├── app.css
+        ├── components/
+        │   ├── Header.svelte
+        │   ├── Hero.svelte
+        │   ├── ControlPanel.svelte
+        │   ├── Viewer3D.svelte         # rendu Three.js
+        │   ├── DevelopedView.svelte    # SVG mm interactif
+        │   ├── PrintLayout.svelte      # rendu impression 1:1
+        │   ├── Slider.svelte
+        │   └── Segmented.svelte
+        └── lib/
+            ├── api.ts          # wrapper invoke() Tauri
+            ├── store.svelte.ts
+            └── svg.ts
 ```
 
 ### 2.7 Validation numérique
@@ -240,7 +249,7 @@ cylinders-intersection/
 Tests unitaires Rust :
 
 ```bash
-cargo test --release
+cd src-tauri && cargo test --lib --release
 ```
 
 Deux cas couverts par défaut :
@@ -262,7 +271,7 @@ python tubes_intersection_and_unwrap.py     # exemple d'exécution intégré
 ## 3) Notes de validité et cas limites
 
 * Pour $\phi=0$, l’équation quadratique **dégénère** ($a=0$) : on retombe sur deux cylindres coaxiaux. L’intersection est un cercle seulement si $R_1=R_2$. Le backend renvoie alors un payload vide (sans erreur) ; l’UI affiche « Pas d’intersection valide ».
-* Pour le mode plan, $\phi$ doit rester strictement dans $(-\pi/2,\,\pi/2)$ : à $\pm\pi/2$ le plan devient parallèle à l’axe du cylindre. Le backend rejette ce cas avec un `400 Bad Request`.
+* Pour le mode plan, $\phi$ doit rester strictement dans $(-\pi/2,\,\pi/2)$ : à $\pm\pi/2$ le plan devient parallèle à l’axe du cylindre. La commande Tauri rejette ce cas avec une `Promise.reject(string)` que l’UI affiche dans la bannière d’erreur.
 * Les formules de $a$, $b(\theta)$, $c_0(\theta)$ ci-dessus proviennent de l’égalité $x^2+y^2=R_1^2$ avec
   $x=R_2\cos\theta$, $y=R_2\sin\theta\cos\phi - t\sin\phi$. On a bien
   $$x^2+y^2=R_2^2\cos^2\theta+R_2^2\sin^2\theta\cos^2\phi-2R_2\sin\theta\cos\phi\sin\phi\,t+\sin^2\phi\,t^2,$$
