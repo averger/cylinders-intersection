@@ -20,7 +20,7 @@
 </script>
 
 <footer
-  class="no-print shrink-0 h-7 px-4 lg:px-6 flex items-center justify-between gap-4 border-t border-white/5 bg-black/40 text-[10px] text-ash num overflow-hidden"
+  class="no-print shrink-0 h-7 px-4 lg:px-6 flex items-center justify-between gap-4 hl-t bg-carbon/50 text-[10px] text-ash num overflow-hidden"
 >
   <div class="flex items-center gap-3 truncate">
     <span class="text-silver">

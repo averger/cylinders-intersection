@@ -16,6 +16,7 @@ import type {
 
 export type Mode = "cyl_cyl" | "cyl_plane";
 export type View = "3d" | "2d";
+export type Theme = "light" | "dark";
 
 export interface Params {
   mode: Mode;
@@ -87,6 +88,7 @@ interface PersistShape {
   studies: Study[];
   activeId: string;
   view: View;
+  theme?: Theme;
 }
 
 function load(): PersistShape | null {
@@ -112,6 +114,8 @@ class AppStore {
   studies = $state<Study[]>([makeStudy("Étude 1")]);
   activeId = $state<string>("");
   view = $state<View>("3d");
+  /** Light is the default — dark is the opt-in "mission control" mode. */
+  theme = $state<Theme>("light");
 
   result = $state<IntersectionPayload | null>(null);
   loading = $state(false);
@@ -130,6 +134,7 @@ class AppStore {
         ? saved.activeId
         : saved.studies[0].id;
       this.view = saved.view === "2d" ? "2d" : "3d";
+      this.theme = saved.theme === "dark" ? "dark" : "light";
     } else {
       this.activeId = this.studies[0].id;
     }
@@ -196,6 +201,11 @@ class AppStore {
     this.persist();
   }
 
+  toggleTheme() {
+    this.theme = this.theme === "light" ? "dark" : "light";
+    this.persist();
+  }
+
   persist() {
     if (typeof localStorage === "undefined") return;
     if (this.persistTimer) clearTimeout(this.persistTimer);
@@ -204,6 +214,7 @@ class AppStore {
         studies: JSON.parse(JSON.stringify(this.studies)),
         activeId: this.activeId,
         view: this.view,
+        theme: this.theme,
       };
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));

@@ -9,21 +9,21 @@
   ];
 </script>
 
-<header class="no-print shrink-0 border-b border-white/5 bg-ink/70 backdrop-blur-xl z-30">
+<header class="no-print shrink-0 hl-b bg-ink/70 backdrop-blur-xl z-30">
   <div class="px-4 lg:px-6 h-14 flex items-center gap-5">
     <a href="/" class="flex items-center gap-3 group shrink-0">
       <span
-        class="relative grid place-items-center w-9 h-9 rounded-xl bg-gradient-to-b from-graphite to-black border border-white/10"
+        class="relative grid place-items-center w-9 h-9 rounded-xl bg-carbon border border-mist"
       >
         <svg viewBox="0 0 32 32" class="w-5 h-5">
           <path
             d="M8 11h12a4 4 0 0 1 4 4 4 4 0 0 1-4 4H8z"
             fill="none"
-            stroke="#ff5b1a"
+            style="stroke: var(--ember)"
             stroke-width="2"
             stroke-linejoin="round"
           />
-          <line x1="14" y1="6" x2="14" y2="26" stroke="#e2e2e2" stroke-width="2" stroke-linecap="round" />
+          <line x1="14" y1="6" x2="14" y2="26" style="stroke: var(--text-2)" stroke-width="2" stroke-linecap="round" />
         </svg>
         <span class="absolute inset-0 rounded-xl ring-1 ring-ember/0 group-hover:ring-ember/40 transition"></span>
       </span>
@@ -39,7 +39,24 @@
       <Segmented options={viewOptions} value={store.view} onchange={(v) => store.setView(v)} />
     </div>
 
-    <div class="flex items-center gap-3 shrink-0">
+    <div class="flex items-center gap-2 shrink-0">
+      <button
+        class="btn-ghost !py-2 !px-3"
+        onclick={() => store.toggleTheme()}
+        aria-label={store.theme === "light" ? "Passer en thème sombre" : "Passer en thème clair"}
+        title={store.theme === "light" ? "Thème sombre" : "Thème clair"}
+      >
+        {#if store.theme === "light"}
+          <svg viewBox="0 0 24 24" class="w-4 h-4 fill-none stroke-current" stroke-width="2" stroke-linecap="round">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z" stroke-linejoin="round" />
+          </svg>
+        {:else}
+          <svg viewBox="0 0 24 24" class="w-4 h-4 fill-none stroke-current" stroke-width="2" stroke-linecap="round">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+          </svg>
+        {/if}
+      </button>
       <button class="btn-ghost !py-2 text-sm" onclick={() => window.print()} aria-label="Imprimer 1:1">
         <svg
           viewBox="0 0 24 24"

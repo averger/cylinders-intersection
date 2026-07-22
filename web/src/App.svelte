@@ -12,6 +12,10 @@
   onMount(() => {
     store.compute();
   });
+
+  $effect(() => {
+    document.documentElement.dataset.theme = store.theme;
+  });
 </script>
 
 <div class="h-screen flex flex-col overflow-hidden">
@@ -30,7 +34,7 @@
 
       {#if store.error}
         <div
-          class="absolute left-4 right-4 bottom-4 ember-glow rounded-xl bg-black/70 px-4 py-3 text-sm text-pearl z-20"
+          class="absolute left-4 right-4 bottom-4 ember-glow rounded-xl glass-strong px-4 py-3 text-sm text-pearl z-20"
         >
           <strong class="text-ember">Erreur de calcul.</strong>
           {store.error}

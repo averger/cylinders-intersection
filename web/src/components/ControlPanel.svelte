@@ -19,7 +19,7 @@
 </script>
 
 <aside
-  class="no-print w-[320px] xl:w-[350px] shrink-0 border-r border-white/5 bg-black/25 overflow-y-auto"
+  class="no-print w-[320px] xl:w-[350px] shrink-0 hl-r bg-graphite/40 overflow-y-auto"
 >
   <div class="p-5 flex flex-col gap-6">
     <section class="space-y-3">
@@ -128,11 +128,11 @@
     />
 
     {#if store.view === "2d"}
-      <div class="pt-5 border-t border-white/10">
+      <div class="pt-5 border-t border-mist">
         <ExportPanel />
       </div>
     {:else}
-      <footer class="pt-4 border-t border-white/5 space-y-2 text-[11px] text-ash">
+      <footer class="pt-4 hl-t space-y-2 text-[11px] text-ash">
         <div class="flex justify-between">
           <span>Périmètre cyl. principal</span>
           <span class="num text-silver"

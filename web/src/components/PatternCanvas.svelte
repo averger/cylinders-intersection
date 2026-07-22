@@ -23,7 +23,7 @@
   let closed = $derived(kind === "branch" ? false : (store.result?.dev_main_closed ?? false));
   let box = $derived(editor.patternBox(kind));
 
-  let accent = $derived(kind === "branch" ? "#ff5b1a" : "#29c2ff");
+  let accent = $derived(kind === "branch" ? "var(--ember)" : "var(--cyan)");
   let title = $derived(
     kind === "branch"
       ? store.result?.mode === "cyl_cyl"
@@ -173,7 +173,7 @@
 <section class="glass card-hairline relative overflow-hidden grid-bg flex flex-col min-h-[260px]">
   <header class="flex items-center justify-between gap-3 px-4 pt-3 pb-1 z-10">
     <div class="flex items-center gap-3 min-w-0">
-      <span class="pill shrink-0" style="border-color: {accent}55; color: {accent}">{title}</span>
+      <span class="pill shrink-0" style="border-color: color-mix(in srgb, {accent} 40%, transparent); color: {accent}">{title}</span>
       {#if store.result}
         <span class="num text-[10px] text-ash truncate">
           Ø {diameter.toFixed(1)} mm · largeur {box ? box.w.toFixed(1) : "—"} mm · hauteur {box
@@ -209,7 +209,7 @@
             y1={Y(box.vMin)}
             x2={X(g.at)}
             y2={Y(box.vMin + box.h)}
-            stroke="rgba(255,255,255,{g.major ? 0.1 : 0.045})"
+            style="stroke: {g.major ? 'var(--grid-major)' : 'var(--grid-line)'}"
             stroke-width={g.major ? viewW / 1600 : viewW / 2600}
           />
         {/each}
@@ -219,7 +219,7 @@
             y1={Y(g.at)}
             x2={X(box.uMin + box.w)}
             y2={Y(g.at)}
-            stroke="rgba(255,255,255,{g.major ? 0.1 : 0.045})"
+            style="stroke: {g.major ? 'var(--grid-major)' : 'var(--grid-line)'}"
             stroke-width={g.major ? viewW / 1600 : viewW / 2600}
           />
         {/each}
@@ -231,8 +231,7 @@
           y={Y(box.vMin + box.h)}
           width={box.w}
           height={box.h}
-          fill="rgba(255,255,255,0.015)"
-          stroke="rgba(255,255,255,0.22)"
+          style="fill: var(--frame-fill); stroke: var(--frame-line)"
           stroke-width={viewW / 900}
           stroke-dasharray="{viewW / 180} {viewW / 220}"
         />
@@ -245,7 +244,7 @@
             y1={Y(box.vMin)}
             x2={X(box.uMin + (box.w * q) / 4)}
             y2={Y(box.vMin + box.h)}
-            stroke="rgba(41,194,255,0.25)"
+            style="stroke: color-mix(in srgb, var(--cyan) 30%, transparent)"
             stroke-width={viewW / 1400}
             stroke-dasharray="{viewW / 140} {viewW / 300}"
           />
@@ -254,7 +253,7 @@
               x={X(box.uMin + (box.w * q) / 4) + viewW / 300}
               y={Y(box.vMin) - viewH / 90}
               font-size={Math.max(2, viewW / 90)}
-              fill="rgba(136,223,250,0.65)"
+              style="fill: color-mix(in srgb, var(--cyan) 70%, transparent)"
               font-family="JetBrains Mono, monospace"
             >
               {q * 90}°
@@ -270,14 +269,14 @@
           width={t.w}
           height={t.h}
           fill="none"
-          stroke="rgba(255,91,26,0.3)"
+          style="stroke: color-mix(in srgb, var(--ember) 35%, transparent)"
           stroke-width={viewW / 1100}
         />
         <text
           x={t.x + viewW / 250}
           y={t.y + Math.max(2.6, viewW / 70)}
           font-size={Math.max(2.6, viewW / 80)}
-          fill="rgba(255,91,26,0.55)"
+          style="fill: color-mix(in srgb, var(--ember) 60%, transparent)"
           font-family="JetBrains Mono, monospace"
         >
           {t.label}
@@ -287,19 +286,19 @@
       <path
         d={cutPath}
         fill="none"
-        stroke={accent}
+        style="stroke: {accent}"
         stroke-width={Math.max(editor.cutWidth, viewW / 700)}
         stroke-linejoin="round"
         stroke-linecap="round"
       />
 
       {#if !closed && points.length > 0}
-        <circle cx={X(points[0].u)} cy={Y(points[0].v)} r={viewW / 400} fill={accent} />
+        <circle cx={X(points[0].u)} cy={Y(points[0].v)} r={viewW / 400} style="fill: {accent}" />
         <circle
           cx={X(points[points.length - 1].u)}
           cy={Y(points[points.length - 1].v)}
           r={viewW / 400}
-          fill={accent}
+          style="fill: {accent}"
         />
       {/if}
 
@@ -309,7 +308,7 @@
           x={X(a.u)}
           y={Y(a.v)}
           font-size={Math.max(a.size_mm, viewW / 110)}
-          fill={editor.selected === index ? "#ffffff" : "rgba(245,245,247,0.85)"}
+          style="fill: {editor.selected === index ? 'var(--text)' : 'color-mix(in srgb, var(--text) 85%, transparent)'}"
           font-family="Inter, sans-serif"
           class="cursor-move"
           onpointerdown={(e) => startDrag(e, index)}
@@ -322,7 +321,7 @@
             cy={Y(a.v)}
             r={viewW / 260}
             fill="none"
-            stroke="#ff5b1a"
+            style="stroke: var(--ember)"
             stroke-width={viewW / 1400}
           />
         {/if}

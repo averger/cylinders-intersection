@@ -25,8 +25,8 @@ Captures Full HD (1920×1080), prêtes pour les réseaux sociaux — dossier
 
 | | |
 |---|---|
-| ![Vue 3D annotée — cylindre × cylindre](docs/screenshots/01-cylix-3d.png) | ![Vue 3D — coupe en sifflet](docs/screenshots/02-cylix-3d-plan.png) |
-| ![Éditeur 2D — les deux mises à plat](docs/screenshots/03-cylix-2d.png) | ![Annotation sur le développé](docs/screenshots/04-cylix-2d-annotation.png) |
+| ![Vue 3D — piquage arrêté à l'intersection (thème clair)](docs/screenshots/01-cylix-3d.png) | ![Vue 3D — coupe en sifflet tronquée au plan](docs/screenshots/02-cylix-3d-plan.png) |
+| ![Éditeur 2D — les deux mises à plat](docs/screenshots/03-cylix-2d.png) | ![Thème sombre](docs/screenshots/04-cylix-3d-dark.png) |
 
 ## 1) Théorie (version courte mais complète)
 
@@ -133,12 +133,19 @@ où $\alpha^\uparrow$ est l’angle **déroulé** (*unwrap*) pour supprimer le s
 Application-outil plein écran : moteur géométrique en **Rust** (Axum + nalgebra),
 interface **Svelte 5 + Tailwind 4** servie en SPA, vue 3D **Three.js**.
 
+* **Thème clair par défaut** (précision atelier) et thème sombre « mission
+  control » en un clic — toute l'interface, les canvases 2D, la scène 3D et la
+  capture PNG suivent le thème.
 * **Layout outil** : paramètres à gauche, viewport central, bascule **3D ↔ 2D**,
   barre de statut ; **études en onglets** (multi-études, renommage au double-clic,
   copie des paramètres courants, persistance locale) — comme dans pilegroupx.
-* **Vue 3D annotée** : cylindres bien lisibles, courbe d'intersection en tube
-  émissif, axes, **arc d'angle φ** et étiquettes Ø₁ / Ø₂ projetées ; orbite,
-  rotation auto, capture **PNG 1920×1080** (annotations composées dans l'image).
+* **Vue 3D fidèle à la pièce** : chaque cylindre **s'arrête à l'intersection** —
+  le tube incliné est maillé jusqu'à son premier contact avec le gros tube
+  (selon la lèvre outer/inner choisie), le cylindre principal est percé de la
+  lumière exacte, le sifflet est tronqué au plan avec son chapeau elliptique.
+  Courbe d'intersection en tube émissif, axes, **arc d'angle φ**, étiquettes
+  Ø₁ / Ø₂ projetées ; orbite, rotation auto, capture **PNG 1920×1080**
+  (annotations composées dans l'image).
 * **Vue 2D — les deux mises à plat** : l'intersection développée **sur chaque
   cylindre** (gabarit du tube incliné = courbe ouverte sur la période complète,
   gueule de loup = contour fermé), calques (grille 10 mm, emprise, génératrices

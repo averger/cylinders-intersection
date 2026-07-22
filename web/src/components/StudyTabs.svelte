@@ -30,7 +30,7 @@
 </script>
 
 <div
-  class="no-print flex items-stretch gap-0.5 h-9 px-4 lg:px-6 border-b border-white/5 bg-black/30 overflow-x-auto"
+  class="no-print flex items-stretch gap-0.5 h-9 px-4 lg:px-6 hl-b bg-carbon/50 overflow-x-auto"
   role="tablist"
   aria-label="Études"
 >
@@ -38,12 +38,12 @@
     {@const active = s.id === store.activeId}
     <div
       class="inline-flex items-center border-t-2 {active
-        ? 'border-t-ember bg-white/[0.04]'
-        : 'border-t-transparent'} border-r border-white/5"
+        ? 'border-t-ember bg-ink'
+        : 'border-t-transparent'} hl-r"
     >
       {#if renamingId === s.id}
         <input
-          class="w-32 h-6 mx-1.5 px-1.5 text-xs bg-black/60 border border-ember/70 rounded text-pearl focus:outline-none"
+          class="w-32 h-6 mx-1.5 px-1.5 text-xs panel-input !border-ember/70 text-pearl focus:outline-none"
           bind:this={renameInput}
           bind:value={renameValue}
           onblur={commitRename}
@@ -78,7 +78,7 @@
     </div>
   {/each}
   <button
-    class="self-center ml-1.5 w-6 h-6 grid place-items-center rounded text-ash hover:text-ember hover:bg-white/5 border border-transparent hover:border-white/10 transition-colors text-base leading-none"
+    class="self-center ml-1.5 w-6 h-6 grid place-items-center rounded text-ash hover:text-ember hover:bg-carbon border border-transparent hover:border-mist transition-colors text-base leading-none"
     aria-label="Nouvelle étude"
     title="Nouvelle étude (copie des paramètres courants)"
     onclick={() => store.addStudy()}

@@ -50,7 +50,7 @@
     {#if editing}
       <input
         type="number"
-        class="num text-pearl bg-black/40 border border-mist/60 rounded-md px-2 py-1 w-28 text-right text-sm focus:outline-none focus:border-ember"
+        class="num panel-input px-2 py-1 w-28 text-right text-sm"
         bind:value={buffer}
         onblur={() => commit(parseFloat(buffer))}
         onkeydown={(e) => {
