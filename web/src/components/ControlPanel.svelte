@@ -13,8 +13,8 @@
   ];
 
   const branchOptions = [
-    { label: "Outer", value: "outer" as Branch },
-    { label: "Inner", value: "inner" as Branch },
+    { label: "Extérieure", value: "outer" as Branch },
+    { label: "Intérieure", value: "inner" as Branch },
   ];
 </script>
 
@@ -64,18 +64,36 @@
         />
       {/if}
       <Slider
-        label={p.mode === "cyl_cyl" ? "Angle entre les axes φ" : "Inclinaison du plan φ"}
+        label={p.mode === "cyl_cyl" ? "Angle entre les axes φ" : "Inclinaison selon X · φx"}
         unit="°"
         min={p.mode === "cyl_cyl" ? 1 : -85}
         max={p.mode === "cyl_cyl" ? 90 : 85}
         step={0.5}
         value={p.angleDeg}
         decimals={1}
+        hint={p.mode === "cyl_plane" ? "bascule du plan autour de l'axe X" : undefined}
         onchange={(v) => {
           store.params = { ...store.params, angleDeg: v };
           store.compute();
         }}
       />
+
+      {#if p.mode === "cyl_plane"}
+        <Slider
+          label="Inclinaison selon Y · φy"
+          unit="°"
+          min={-85}
+          max={85}
+          step={0.5}
+          value={p.angleYDeg}
+          decimals={1}
+          hint="bascule du plan autour de l'axe Y — plan pleinement orienté"
+          onchange={(v) => {
+            store.params = { ...store.params, angleYDeg: v };
+            store.compute();
+          }}
+        />
+      {/if}
 
       {#if p.mode === "cyl_plane"}
         <Slider
@@ -98,8 +116,7 @@
     {#if p.mode === "cyl_cyl"}
       <section class="space-y-3">
         <div class="flex items-center justify-between">
-          <span class="text-[10px] uppercase tracking-[0.18em] text-ash">Branche</span>
-          <span class="text-[10px] text-ash/70">lèvre conservée</span>
+          <span class="text-[10px] uppercase tracking-[0.18em] text-ash">Lèvre de coupe</span>
         </div>
         <Segmented
           options={branchOptions}
@@ -109,23 +126,13 @@
             store.compute();
           }}
         />
+        <p class="text-[10px] text-ash/70 leading-relaxed">
+          Côté d'où arrive le tube incliné : <b>extérieure</b> = il s'appuie sur le
+          gros tube et s'arrête au premier contact (piquage en selle, le cas
+          courant) ; <b>intérieure</b> = il arrive du côté opposé — gabarit miroir.
+        </p>
       </section>
     {/if}
-
-    <Slider
-      label="Échantillonnage"
-      unit="pts"
-      min={240}
-      max={4800}
-      step={60}
-      value={p.samples}
-      decimals={0}
-      hint="Plus de points → contour plus lisse"
-      onchange={(v) => {
-        store.params = { ...store.params, samples: Math.round(v) };
-        store.compute();
-      }}
-    />
 
     {#if store.view === "2d"}
       <div class="pt-5 border-t border-mist">

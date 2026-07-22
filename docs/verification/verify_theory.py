@@ -142,6 +142,13 @@ check("(13) amplitude crête-à-crête = 2 R1 |tanφ| (numérique)",
       all(abs((z0v := 0) + r1v*abs(np.tan(p)) - max(abs(-r1v*np.tan(p)*np.sin(np.linspace(0, 2*np.pi, 20001))))) < 1e-6
           for r1v, p in [(30.0, 0.6), (75.0, -1.2), (12.5, 1.4)]))
 
+# --- (13') oriented plane: b sinθ + a cosθ = √(a²+b²) sin(θ+ψ), ψ=atan2(a,b)
+aa, bb = sp.symbols("aa bb", positive=True)
+lhs = bb*sp.sin(theta) + aa*sp.cos(theta)
+psi = sp.atan2(aa, bb)
+rhs = sp.sqrt(aa**2 + bb**2)*sp.sin(theta + psi)
+check("(13') plan oriente : sinusoide dephasee exacte", sp.simplify(sp.expand_trig(rhs) - lhs) == 0)
+
 # --- §6.1 Steinmetz: R1 = R2 = R, φ = π/2 → intersection in planes z = ±y
 Rs = sp.Symbol("R", positive=True)
 tps = tp.subs({R1: Rs, R2: Rs, phi: sp.pi/2})

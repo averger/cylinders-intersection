@@ -24,6 +24,7 @@ export interface IntersectionPayload {
   r1: number;
   r2: number | null;
   phi: number;
+  phi_y: number;
   branch: Branch | null;
   curve3d: Point3[];
   dev_branch: DevPoint[];
@@ -46,6 +47,7 @@ export interface CylCylInput {
 export interface CylPlaneInput {
   r1: number;
   phi: number;
+  phi_y?: number;
   z0?: number;
   n_samples?: number;
 }

@@ -359,9 +359,15 @@ fn layout_sheet(
 
     let phi_deg = payload.phi.to_degrees();
     let meta = match kind {
-        PatternKind::Branch => format!(
-            "Ø {diameter:.1} mm — périmètre {circumference:.1} mm — phi = {phi_deg:.1}°"
-        ),
+        PatternKind::Branch => {
+            let mut m = format!(
+                "Ø {diameter:.1} mm — périmètre {circumference:.1} mm — phi = {phi_deg:.1}°"
+            );
+            if payload.phi_y.abs() > 1e-9 {
+                m.push_str(&format!(" — phi_y = {:.1}°", payload.phi_y.to_degrees()));
+            }
+            m
+        }
         PatternKind::Main => format!(
             "Ø {diameter:.1} mm — lumière de piquage — phi = {phi_deg:.1}°"
         ),
@@ -500,6 +506,7 @@ mod tests {
         d.source = SourceSpec::CylPlane(CylPlaneInput {
             r1: 40.0,
             phi: 0.5,
+            phi_y: 0.0,
             z0: 0.0,
             n_samples: 360,
         });

@@ -22,7 +22,8 @@ export interface Params {
   mode: Mode;
   d1: number;       // diameter of main cyl, mm
   d2: number;       // diameter of branch (cyl-cyl only), mm
-  angleDeg: number; // angle between axes (cyl-cyl) or plane tilt (cyl-plane)
+  angleDeg: number; // angle between axes (cyl-cyl) or plane X-tilt (cyl-plane)
+  angleYDeg: number; // plane Y-tilt (oriented plane, cyl-plane only)
   branch: Branch;
   z0: number;       // plane offset (cyl-plane), mm
   samples: number;
@@ -49,6 +50,7 @@ const DEFAULT_PARAMS: Params = {
   d1: 100,
   d2: 70,
   angleDeg: 45,
+  angleYDeg: 0,
   branch: "outer",
   z0: 0,
   samples: 1440,
@@ -242,7 +244,13 @@ class AppStore {
           branch: p.branch,
         });
       } else {
-        res = await api.cylPlane({ r1: p.d1 / 2, phi, z0: p.z0, n_samples: p.samples });
+        res = await api.cylPlane({
+          r1: p.d1 / 2,
+          phi,
+          phi_y: (p.angleYDeg * Math.PI) / 180,
+          z0: p.z0,
+          n_samples: p.samples,
+        });
       }
       if (myToken !== this.token) return;
       this.result = res;

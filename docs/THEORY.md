@@ -297,6 +297,27 @@ résultat classique fournit deux contrôles immédiats : à $\varphi = 0$ le
 développé est une droite (coupe droite), et l'amplitude diverge quand
 $\varphi \to \pi/2$ (le plan devient parallèle à l'axe — cas exclu par (11)).
 
+### 4.3 Plan pleinement orienté (deux inclinaisons)
+
+Le cas général d'un plan orienté par deux basculements — $\varphi_x$ autour de
+$Ox$ et $\varphi_y$ autour de $Oy$ — s'écrit
+$z = z_0 - y\tan\varphi_x - x\tan\varphi_y$, de normale proportionnelle à
+$(\tan\varphi_y,\ \tan\varphi_x,\ 1)$. En posant $a = \tan\varphi_y$ et
+$b = \tan\varphi_x$, le développé reste une **sinusoïde pure, déphasée** :
+
+$$
+v(u) \;=\; z_0 \;-\; R_1\sqrt{a^2+b^2}\,
+\sin\!\Bigl(\frac{u}{R_1} + \psi\Bigr),
+\qquad \psi = \operatorname{atan2}(a, b),
+\tag{13'}
+$$
+
+car $b\sin\theta + a\cos\theta = \sqrt{a^2+b^2}\,\sin(\theta+\psi)$.
+L'amplitude crête à crête vaut $2R_1\sqrt{\tan^2\varphi_x+\tan^2\varphi_y}$
+et l'angle réel entre le plan et la section droite est
+$\arctan\sqrt{a^2+b^2}$ ; le second angle ne fait que **tourner la phase** du
+gabarit autour du tube. (13) est le cas $a = 0$.
+
 ---
 
 ## 5. Choix de la branche et points de tangence

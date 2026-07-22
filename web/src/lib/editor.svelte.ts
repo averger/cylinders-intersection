@@ -87,7 +87,14 @@ class EditorStore {
           n_samples: p.samples,
           branch: p.branch,
         }
-      : { mode: "cyl_plane", r1: p.d1 / 2, phi, z0: p.z0, n_samples: p.samples };
+      : {
+          mode: "cyl_plane",
+          r1: p.d1 / 2,
+          phi,
+          phi_y: (p.angleYDeg * Math.PI) / 180,
+          z0: p.z0,
+          n_samples: p.samples,
+        };
   }
 
   document(): ExportDocument {

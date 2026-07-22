@@ -29,6 +29,10 @@ pub struct CylPlaneInput {
     pub r1: f64,
     /// Tilt of the plane around `Ox`, in radians (`0` is horizontal).
     pub phi: f64,
+    /// Additional tilt of the plane around `Oy`, in radians — a fully
+    /// oriented cutting plane `z = z0 − y·tan(phi) − x·tan(phi_y)`.
+    #[serde(default)]
+    pub phi_y: f64,
     /// Vertical offset of the plane along `Oz`, in millimetres.
     #[serde(default)]
     pub z0: f64,
@@ -56,6 +60,8 @@ pub struct IntersectionPayload {
     pub r1: f64,
     pub r2: Option<f64>,
     pub phi: f64,
+    /// Second plane tilt (around `Oy`); `0` outside the oriented-plane mode.
+    pub phi_y: f64,
     pub branch: Option<Branch>,
     /// Intersection curve in 3D space (mm).
     pub curve3d: Vec<Point3>,
@@ -153,6 +159,7 @@ pub fn cyl_cyl(input: CylCylInput) -> IntersectionPayload {
         r1,
         r2: Some(r2),
         phi,
+        phi_y: 0.0,
         branch: Some(branch),
         curve3d,
         dev_branch,
@@ -187,14 +194,17 @@ fn polyline_is_loop(pts: &[(f64, f64)]) -> bool {
     gap <= 5.0 * mean_step.max(1e-9)
 }
 
-/// Cylinder–plane intersection: a single tube cut by an inclined plane.
+/// Cylinder–plane intersection: a single tube cut by a fully oriented
+/// plane `z = z0 − y·tan(phi) − x·tan(phi_y)` (normal proportional to
+/// `(tan(phi_y), tan(phi), 1)`, passing through `(0, 0, z0)`).
 ///
-/// The plane equation, in millimetres, is `z = z0 - y·tan(phi)` — equivalent
-/// to a plane normal `(0, sin phi, cos phi)` passing through `(0, 0, z0)`.
+/// The developed cut stays an exact sinusoid: with `a = tan(phi_y)` and
+/// `b = tan(phi)`, `v(u) = z0 − R·√(a²+b²)·sin(u/R + ψ)`, `ψ = atan2(a, b)`.
 pub fn cyl_plane(input: CylPlaneInput) -> IntersectionPayload {
-    let CylPlaneInput { r1, phi, z0, n_samples } = input;
+    let CylPlaneInput { r1, phi, phi_y, z0, n_samples } = input;
     let n = n_samples.max(64);
     let tan_phi = phi.tan();
+    let tan_phi_y = phi_y.tan();
 
     let mut curve3d = Vec::with_capacity(n);
     let mut dev_branch = Vec::with_capacity(n);
@@ -204,7 +214,7 @@ pub fn cyl_plane(input: CylPlaneInput) -> IntersectionPayload {
         let (st, ct) = theta.sin_cos();
         let x = r1 * ct;
         let y = r1 * st;
-        let z = z0 - y * tan_phi;
+        let z = z0 - y * tan_phi - x * tan_phi_y;
         curve3d.push(Point3 { x, y, z });
         dev_branch.push(DevPoint { theta, u: r1 * theta, v: z });
     }
@@ -216,6 +226,7 @@ pub fn cyl_plane(input: CylPlaneInput) -> IntersectionPayload {
         r1,
         r2: None,
         phi,
+        phi_y,
         branch: None,
         curve3d,
         dev_branch,
@@ -291,10 +302,40 @@ mod tests {
     }
 
     #[test]
+    fn oriented_plane_is_a_phase_shifted_sinusoid() {
+        // Two tilts: v(u) = z0 − R·√(a²+b²)·sin(u/R + ψ) with a = tan(φy),
+        // b = tan(φx).  Check amplitude and the phase via the maximum point.
+        let (r1, phix, phiy) = (30.0, 0.5f64, 0.35f64);
+        let res = cyl_plane(CylPlaneInput {
+            r1,
+            phi: phix,
+            phi_y: phiy,
+            z0: 10.0,
+            n_samples: 4096,
+        });
+        let amp = r1 * (phix.tan().hypot(phiy.tan()));
+        let v_max = res.dev_branch.iter().map(|p| p.v).fold(f64::MIN, f64::max);
+        let v_min = res.dev_branch.iter().map(|p| p.v).fold(f64::MAX, f64::min);
+        assert!((v_max - (10.0 + amp)).abs() < 1e-3, "v_max = {v_max}");
+        assert!((v_min - (10.0 - amp)).abs() < 1e-3, "v_min = {v_min}");
+        // Maximum at θ* = −ψ + 3π/2 (mod 2π), ψ = atan2(a, b).
+        let psi = phiy.tan().atan2(phix.tan());
+        let theta_star = (-psi + 1.5 * std::f64::consts::PI).rem_euclid(std::f64::consts::TAU);
+        let best = res
+            .dev_branch
+            .iter()
+            .max_by(|a, b| a.v.partial_cmp(&b.v).unwrap())
+            .unwrap();
+        let dtheta = (best.theta - theta_star).abs().min(std::f64::consts::TAU - (best.theta - theta_star).abs());
+        assert!(dtheta < 0.01, "θ_max = {}, attendu {}", best.theta, theta_star);
+    }
+
+    #[test]
     fn plane_cut_returns_full_period() {
         let res = cyl_plane(CylPlaneInput {
             r1: 30.0,
             phi: std::f64::consts::FRAC_PI_4,
+            phi_y: 0.0,
             z0: 0.0,
             n_samples: 360,
         });

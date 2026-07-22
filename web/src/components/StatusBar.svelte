@@ -28,8 +28,8 @@
     </span>
     <span>Ø₁ {p.d1.toFixed(1)}</span>
     {#if p.mode === "cyl_cyl"}<span>Ø₂ {p.d2.toFixed(1)}</span>{/if}
-    <span>φ {p.angleDeg.toFixed(1)}°</span>
-    {#if p.mode === "cyl_plane"}<span>z₀ {p.z0.toFixed(1)}</span>{/if}
+    <span>{p.mode === "cyl_plane" ? "φx" : "φ"} {p.angleDeg.toFixed(1)}°</span>
+    {#if p.mode === "cyl_plane"}<span>φy {p.angleYDeg.toFixed(1)}°</span><span>z₀ {p.z0.toFixed(1)}</span>{/if}
     {#if r}
       <span class="hidden sm:inline">périm. {r.circumference_main.toFixed(1)} mm</span>
       <span class="hidden md:inline">{r.curve3d.length} pts</span>

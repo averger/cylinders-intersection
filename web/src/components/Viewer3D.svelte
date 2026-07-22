@@ -233,16 +233,17 @@
     return (h[0] + h[1]) / 2;
   }
 
-  /** Tube cut by the inclined plane: kept below the cut, per α-column. */
+  /** Tube cut by the oriented plane: kept below the cut, per α-column. */
   function buildPlaneCutMain(payload: IntersectionPayload): {
     wall: THREE.BufferGeometry;
     bottomZ: number;
   } {
     const r1 = payload.r1;
     const tan = Math.tan(payload.phi);
+    const tanY = Math.tan(payload.phi_y ?? 0);
     const z0 = store.params.z0;
     const drop = Math.max(2.4 * r1, 140);
-    const bottomZ = z0 - Math.abs(tan) * r1 - drop;
+    const bottomZ = z0 - Math.hypot(tan, tanY) * r1 - drop;
     const nA = 361;
 
     const positions: number[] = [];
@@ -257,7 +258,7 @@
     let prevLo = -1, prevHi = -1;
     for (let i = 0; i < nA; i++) {
       const alpha = (2 * Math.PI * i) / (nA - 1);
-      const zTop = z0 - r1 * Math.sin(alpha) * tan;
+      const zTop = z0 - r1 * Math.sin(alpha) * tan - r1 * Math.cos(alpha) * tanY;
       const lo = push(alpha, bottomZ);
       const hi = push(alpha, zTop);
       if (i > 0) indices.push(prevLo, lo, prevHi, lo, hi, prevHi);
@@ -626,9 +627,15 @@
           roughness: 0.75,
           depthWrite: false,
         });
+        // Oriented plane z = z0 − y·tan(φx) − x·tan(φy): math normal
+        // ∝ (tanφy, tanφx, 1) → three (tanφy, 1, −tanφx).
+        const a = Math.tan(payload.phi_y ?? 0);
+        const b = Math.tan(phiAngle);
+        const nThree = new THREE.Vector3(a, 1, -b).normalize();
+        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), nThree);
+
         const rect = new THREE.Mesh(rectGeom, rectMat);
-        // three-space plane normal: (0, cosφ, −sinφ).
-        rect.rotation.x = -Math.PI / 2 - phiAngle;
+        rect.quaternion.copy(q);
         rect.position.y = store.params.z0;
         solidsGroup.add(rect);
 
@@ -641,7 +648,7 @@
           ]),
           new THREE.LineBasicMaterial({ color: pal.axisBranch, transparent: true, opacity: 0.75 }),
         );
-        border.rotation.x = -Math.PI / 2 - phiAngle;
+        border.quaternion.copy(q);
         border.position.y = store.params.z0;
         solidsGroup.add(border);
       }
@@ -657,8 +664,12 @@
           opacity: 0.85,
         });
         solidsGroup.add(new THREE.Mesh(cap, capMat));
+        const phiYDeg = ((payload.phi_y ?? 0) * 180) / Math.PI;
         anchors.push({
-          text: `plan · φ ${((phiAngle * 180) / Math.PI).toFixed(1)}°`,
+          text:
+            Math.abs(phiYDeg) > 0.05
+              ? `plan · φx ${((phiAngle * 180) / Math.PI).toFixed(1)}° · φy ${phiYDeg.toFixed(1)}°`
+              : `plan · φ ${((phiAngle * 180) / Math.PI).toFixed(1)}°`,
           pos: new THREE.Vector3(0, store.params.z0 + r1 * Math.abs(Math.tan(phiAngle)) * 0.5 + 14, 0),
           color: "var(--ember)",
         });
@@ -696,31 +707,62 @@
         color: "var(--ember)",
         dy: 0,
       });
-    } else if (payload.mode === "cyl_plane" && Math.abs(phiAngle) > 1e-3) {
-      // Sector between the horizontal and the cutting plane, at z0.
+    } else if (payload.mode === "cyl_plane") {
       const rArc = r1 * 1.9;
       const origin = new THREE.Vector3(0, store.params.z0, 0);
-      const sgn = Math.sign(phiAngle);
       const emberCol = palette().curve;
-      annotGroup.add(
-        angleSector(
-          origin,
-          (sA) => new THREE.Vector3(0, -Math.sin(sA) * sgn, -Math.cos(sA)),
-          Math.abs(phiAngle),
-          rArc * 0.55,
-          rArc,
-          emberCol,
-        ),
-      );
-      const midA = Math.abs(phiAngle) / 2;
-      anchors.push({
-        text: `φ = ${((phiAngle * 180) / Math.PI).toFixed(1)}°`,
-        pos: origin
-          .clone()
-          .add(new THREE.Vector3(0, -Math.sin(midA) * sgn, -Math.cos(midA)).multiplyScalar(rArc * 0.78)),
-        color: "var(--ember)",
-        dy: 0,
-      });
+      const phiY = payload.phi_y ?? 0;
+      const both = Math.abs(phiY) > 1e-3 && Math.abs(phiAngle) > 1e-3;
+
+      // Tilt around X — sector in the x = 0 plane.
+      if (Math.abs(phiAngle) > 1e-3) {
+        const sgn = Math.sign(phiAngle);
+        annotGroup.add(
+          angleSector(
+            origin,
+            (sA) => new THREE.Vector3(0, -Math.sin(sA) * sgn, -Math.cos(sA)),
+            Math.abs(phiAngle),
+            rArc * 0.55,
+            rArc,
+            emberCol,
+          ),
+        );
+        const midA = Math.abs(phiAngle) / 2;
+        anchors.push({
+          text: `${both ? "φx" : "φ"} = ${((phiAngle * 180) / Math.PI).toFixed(1)}°`,
+          pos: origin
+            .clone()
+            .add(
+              new THREE.Vector3(0, -Math.sin(midA) * sgn, -Math.cos(midA)).multiplyScalar(rArc * 0.78),
+            ),
+          color: "var(--ember)",
+          dy: 0,
+        });
+      }
+
+      // Tilt around Y — sector in the y_math = 0 plane (three x-y plane).
+      if (Math.abs(phiY) > 1e-3) {
+        const sgnY = Math.sign(phiY);
+        annotGroup.add(
+          angleSector(
+            origin,
+            (sA) => new THREE.Vector3(Math.cos(sA), -Math.sin(sA) * sgnY, 0),
+            Math.abs(phiY),
+            rArc * 0.55,
+            rArc,
+            palette().axisMain,
+          ),
+        );
+        const midA = Math.abs(phiY) / 2;
+        anchors.push({
+          text: `φy = ${(phiY * 180 / Math.PI).toFixed(1)}°`,
+          pos: origin
+            .clone()
+            .add(new THREE.Vector3(Math.cos(midA), -Math.sin(midA) * sgnY, 0).multiplyScalar(rArc * 0.78)),
+          color: "var(--cyan)",
+          dy: 0,
+        });
+      }
     }
 
     // Intersection curve as an emissive tube — the star of the scene.

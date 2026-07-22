@@ -9,7 +9,7 @@ import type { Branch } from "./api";
 
 export type SourceSpec =
   | { mode: "cyl_cyl"; r1: number; r2: number; phi: number; n_samples: number; branch: Branch }
-  | { mode: "cyl_plane"; r1: number; phi: number; z0: number; n_samples: number };
+  | { mode: "cyl_plane"; r1: number; phi: number; phi_y: number; z0: number; n_samples: number };
 
 export type PageFormat = "a4" | "a3" | "a2";
 export type PageOrientation = "portrait" | "landscape";

@@ -77,9 +77,9 @@ async fn api_cyl_plane(Json(input): Json<CylPlaneInput>) -> Result<Json<Intersec
         return Err(ApiError::bad_request("r1 must be strictly positive."));
     }
     let half_pi = std::f64::consts::FRAC_PI_2;
-    if input.phi.abs() >= half_pi - 1e-3 {
+    if input.phi.abs() >= half_pi - 1e-3 || input.phi_y.abs() >= half_pi - 1e-3 {
         return Err(ApiError::bad_request(
-            "phi must lie in (-π/2, π/2): the plane cannot become parallel to the cylinder axis.",
+            "phi and phi_y must lie in (-π/2, π/2): the plane cannot become parallel to the cylinder axis.",
         ));
     }
     Ok(Json(cyl_plane(input)))
