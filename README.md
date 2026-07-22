@@ -143,9 +143,11 @@ interface **Svelte 5 + Tailwind 4** servie en SPA, vue 3D **Three.js**.
   le tube incliné est maillé jusqu'à son premier contact avec le gros tube
   (selon la lèvre outer/inner choisie), le cylindre principal est percé de la
   lumière exacte, le sifflet est tronqué au plan avec son chapeau elliptique.
-  Courbe d'intersection en tube émissif, axes, **arc d'angle φ**, étiquettes
-  Ø₁ / Ø₂ projetées ; orbite, rotation auto, capture **PNG 1920×1080**
-  (annotations composées dans l'image).
+  Matériaux pastel légèrement translucides, courbe d'intersection en tube
+  émissif, axes, **arc d'angle φ**, **annotations à lignes de rappel** (point
+  d'ancrage + chip) avec lignes de diamètre sur les rives ; orbite, rotation
+  auto, capture **PNG 1920×1080** (annotations et rappels composés dans
+  l'image).
 * **Vue 2D — les deux mises à plat** : l'intersection développée **sur chaque
   cylindre** (gabarit du tube incliné = courbe ouverte sur la période complète,
   gueule de loup = contour fermé), calques (grille 10 mm, emprise, génératrices
@@ -154,6 +156,9 @@ interface **Svelte 5 + Tailwind 4** servie en SPA, vue 3D **Three.js**.
 * Export **PDF vectoriel mm-exact** : échelle **1:1 tuilée** avec repères de
   collage (tuiles A1, B1, …) — à dérouler sur le tube et couper directement —
   cartouche et règle de contrôle 100 mm ; ou mode « ajusté » pour aperçu.
+  Le tuilage couvre **l'emprise de la courbe** (pas le périmètre déroulé
+  entier) et **les pages vides sont supprimées** : chaque feuille imprimée
+  porte du trait de coupe. L'aperçu 2D affiche exactement les tuiles émises.
 * Export **DXF R12** (calques `CUT` / `FRAME` / `AXIS` / `TEXT` / `ANNOT`, mm)
   pour AutoCAD, QCAD, LibreCAD et chaînes CAM laser/plasma.
 * Export **SVG 1:1** par mise à plat, impression navigateur 1:1.

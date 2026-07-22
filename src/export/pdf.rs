@@ -397,7 +397,8 @@ fn render_fit_page(doc: &ExportDocument, sheet: &Sheet, idx: usize, count: usize
     let view_w = pw - 2.0 * margin;
     let view_h = ph - 2.0 * margin - TITLE_BLOCK_H_MM;
 
-    let (u0, v0, u1, v1) = sheet.bbox;
+    // Fit the useful drawing (cut + annotations), not the empty frame.
+    let (u0, v0, u1, v1) = sheet.cut_bbox;
     let w = (u1 - u0).max(1e-6);
     let h = (v1 - v0).max(1e-6);
     let s = (view_w / w).min(view_h / h).min(1.0);
@@ -434,7 +435,7 @@ fn render_tile_page(
 ) -> PageDef {
     let (pw, ph) = doc.page.size_mm();
     let margin = doc.page.margin_mm;
-    let (u0, _v0, _u1, v1) = sheet.bbox;
+    let (u0, _v0, _u1, v1) = sheet.cut_bbox;
 
     // Row 0 is the top row so labels read naturally on the assembled wall.
     let tile_u = u0 + col as f64 * plan.step_x;
@@ -538,10 +539,23 @@ pub fn render_pdf(doc: &ExportDocument) -> Result<Vec<u8>, ExportError> {
                 layouts.push((si, None));
             }
             ScaleMode::OneToOne => {
-                let (u0, v0, u1, v1) = sheet.bbox;
+                // Tile over the cut extents only, and drop tiles where no
+                // cut line nor annotation lands: nobody glues empty grids.
+                let (u0, v0, u1, v1) = sheet.cut_bbox;
                 let plan = plan_tiles(&doc.page, u1 - u0, v1 - v0);
                 for row in 0..plan.rows {
                     for col in 0..plan.cols {
+                        let tile_u = u0 + col as f64 * plan.step_x;
+                        let tile_v_top = v1 - row as f64 * plan.step_y;
+                        if !sheet.rect_has_content(
+                            tile_u,
+                            tile_v_top - plan.view_h,
+                            plan.view_w,
+                            plan.view_h,
+                            plan.overlap,
+                        ) {
+                            continue;
+                        }
                         count += 1;
                         layouts.push((si, Some((col, row, plan))));
                     }
@@ -620,8 +634,12 @@ mod tests {
         let bytes = render_pdf(&doc(ScaleMode::OneToOne)).unwrap();
         let text = String::from_utf8_lossy(&bytes);
         let pages = text.matches("/Type /Page ").count();
-        assert!(pages >= 4, "expected tiling, got {pages} pages");
+        // Branch sinusoid spans the full 377 mm circumference → 2 columns;
+        // the gueule de loup egg fits on a single sheet.  Every page carries
+        // actual cut geometry.
+        assert_eq!(pages, 3, "expected 3 useful pages, got {pages}");
         assert!(text.contains("(Tuile A1)"));
+        assert!(text.contains("(Tuile B1)"));
     }
 
     #[test]
@@ -646,6 +664,26 @@ mod tests {
         let entry = std::str::from_utf8(&bytes[first..first + 10]).unwrap();
         let obj1: usize = entry.parse().unwrap();
         assert!(bytes[obj1..].starts_with(b"1 0 obj"));
+    }
+
+    #[test]
+    fn tiling_covers_the_cut_not_the_empty_frame() {
+        // Ø160 main / Ø60 branch: the gueule de loup egg occupies ~60 mm of
+        // the 502 mm unwrapped circumference.  Tiling the frame would burn
+        // 2+ pages on empty grid; tiling the cut box needs exactly one.
+        let mut d = doc(ScaleMode::OneToOne);
+        d.source = SourceSpec::CylCyl(CylCylInput {
+            r1: 80.0,
+            r2: 30.0,
+            phi: 1.0,
+            n_samples: 720,
+            branch: Branch::Outer,
+        });
+        let bytes = render_pdf(&d).unwrap();
+        let text = String::from_utf8_lossy(&bytes);
+        let pages = text.matches("/Type /Page ").count();
+        // Branch sinusoid (188 mm wide) → 1 page; egg (~60 mm) → 1 page.
+        assert_eq!(pages, 2, "expected 2 useful pages, got {pages}");
     }
 
     #[test]

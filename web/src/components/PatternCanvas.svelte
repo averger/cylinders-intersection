@@ -4,7 +4,7 @@
   import { store } from "../lib/store.svelte";
   import { editor } from "../lib/editor.svelte";
   import { downloadSVG } from "../lib/svg";
-  import { planTiles, tileLabel, type PatternKind } from "../lib/export";
+  import type { PatternKind } from "../lib/export";
 
   interface Props {
     kind: PatternKind;
@@ -67,19 +67,12 @@
   let uGrid = $derived(box ? gridLines(box.uMin, box.w) : []);
   let vGrid = $derived(box ? gridLines(box.vMin, box.h) : []);
 
-  let tiles = $derived.by(() => {
-    if (!box || editor.scale !== "one_to_one") return [];
-    const plan = planTiles(editor.page, box.w, box.h);
-    const out: { x: number; y: number; w: number; h: number; label: string }[] = [];
-    for (let row = 0; row < plan.rows; row++) {
-      for (let col = 0; col < plan.cols; col++) {
-        const u = box.uMin + col * plan.stepX;
-        const vTop = box.vMin + box.h - row * plan.stepY;
-        out.push({ x: X(u), y: Y(vTop), w: plan.viewW, h: plan.viewH, label: tileLabel(col, row) });
-      }
-    }
-    return out;
-  });
+  // Non-empty pages only, tiled over the cut extents — mirrors the backend.
+  let tiles = $derived(
+    editor
+      .tiles(kind)
+      .map((t) => ({ x: X(t.u0), y: Y(t.vTop), w: t.w, h: t.h, label: t.label })),
+  );
 
   let annotationsHere = $derived(
     editor.annotations.map((a, index) => ({ a, index })).filter(({ a }) => a.pattern === kind),

@@ -23,9 +23,15 @@
     pos: THREE.Vector3;
     /** CSS color expression (var(--…) allowed — labels are DOM). */
     color: string;
+    /** Chip offset from the projected anchor, px (leader line drawn between). */
+    dx?: number;
+    dy?: number;
     el?: HTMLDivElement;
+    leader?: SVGLineElement;
+    dot?: SVGCircleElement;
   }
   let anchors: Anchor[] = [];
+  let leadersEl = $state<SVGSVGElement | undefined>(undefined);
 
   // Camera target / orbit state (lightweight orbit controls — no extra dep).
   let target = new THREE.Vector3(0, 0, 0);
@@ -42,9 +48,9 @@
   function palette() {
     const light = store.theme === "light";
     return {
-      main: light ? 0x2f9fce : 0x88dffa,
-      mainRing: light ? 0x1f7ea8 : 0x88dffa,
-      branch: light ? 0xf4691f : 0xff7a3a,
+      main: light ? 0x9ecfe2 : 0x7fc4de,
+      mainRing: light ? 0x5aa3c0 : 0x9ad9ef,
+      branch: light ? 0xf3b18a : 0xe9a071,
       curve: light ? 0xe04c0d : 0xff5b1a,
       curveEmissive: light ? 0xb33a05 : 0xff3c00,
       axisMain: light ? 0x1f7ea8 : 0x88dffa,
@@ -287,9 +293,13 @@
   function solidMaterial(color: number): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
       color,
-      metalness: 0.3,
-      roughness: 0.38,
+      metalness: 0.22,
+      roughness: 0.42,
       side: THREE.DoubleSide,
+      // Soft translucency; depthWrite stays on so the ground grid and the
+      // far walls remain properly occluded.
+      transparent: true,
+      opacity: 0.86,
     });
   }
 
@@ -345,19 +355,37 @@
     obj.parent?.remove(obj);
   }
 
+  const SVG_NS = "http://www.w3.org/2000/svg";
+
   function rebuildLabels() {
-    if (!labelsEl) return;
+    if (!labelsEl || !leadersEl) return;
     labelsEl.innerHTML = "";
+    leadersEl.innerHTML = "";
     for (const a of anchors) {
       const el = document.createElement("div");
       el.textContent = a.text;
       el.style.cssText =
-        `position:absolute;transform:translate(-50%,-130%);white-space:nowrap;` +
+        `position:absolute;transform:translate(-50%,-50%);white-space:nowrap;` +
         `font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.04em;` +
         `color:${a.color};background:var(--panel-2);border:1px solid var(--line-2);` +
-        `padding:2px 7px;border-radius:999px;pointer-events:none;backdrop-filter:blur(6px);`;
+        `padding:3px 9px;border-radius:999px;pointer-events:none;backdrop-filter:blur(6px);` +
+        `box-shadow:0 2px 10px rgba(20,20,25,0.12);`;
       labelsEl.appendChild(el);
       a.el = el;
+
+      const leader = document.createElementNS(SVG_NS, "line");
+      leader.setAttribute("stroke", "var(--text-3)");
+      leader.setAttribute("stroke-width", "1");
+      leadersEl.appendChild(leader);
+      a.leader = leader;
+
+      const dot = document.createElementNS(SVG_NS, "circle");
+      dot.setAttribute("r", "2.6");
+      dot.setAttribute("fill", "var(--bg-2)");
+      dot.setAttribute("stroke", "var(--text-3)");
+      dot.setAttribute("stroke-width", "1.2");
+      leadersEl.appendChild(dot);
+      a.dot = dot;
     }
   }
 
@@ -370,11 +398,23 @@
       if (!a.el) continue;
       v.copy(a.pos).project(cam);
       const visible = v.z < 1 && Math.abs(v.x) < 1.2 && Math.abs(v.y) < 1.2;
-      a.el.style.display = visible ? "block" : "none";
-      if (visible) {
-        a.el.style.left = `${((v.x + 1) / 2) * w}px`;
-        a.el.style.top = `${((1 - v.y) / 2) * h}px`;
-      }
+      const disp = visible ? "block" : "none";
+      a.el.style.display = disp;
+      a.leader?.setAttribute("visibility", visible ? "visible" : "hidden");
+      a.dot?.setAttribute("visibility", visible ? "visible" : "hidden");
+      if (!visible) continue;
+      const px = ((v.x + 1) / 2) * w;
+      const py = ((1 - v.y) / 2) * h;
+      const cx = px + (a.dx ?? 0);
+      const cy = py + (a.dy ?? -46);
+      a.el.style.left = `${cx}px`;
+      a.el.style.top = `${cy}px`;
+      a.leader?.setAttribute("x1", String(px));
+      a.leader?.setAttribute("y1", String(py));
+      a.leader?.setAttribute("x2", String(cx));
+      a.leader?.setAttribute("y2", String(cy + 12));
+      a.dot?.setAttribute("cx", String(px));
+      a.dot?.setAttribute("cy", String(py));
     }
   }
 
@@ -439,12 +479,15 @@
             pal.axisBranch,
           ),
         );
+        // Diameter line across the far rim of the branch.
+        const rimA = new THREE.Vector3(-r2, tEnd, 0).applyEuler(new THREE.Euler(phiAngle, 0, 0));
+        const rimB = new THREE.Vector3(r2, tEnd, 0).applyEuler(new THREE.Euler(phiAngle, 0, 0));
+        annotGroup.add(axisLine(rimA, rimB, pal.axisBranch));
         anchors.push({
           text: `Ø₂ ${(r2 * 2).toFixed(1)} mm`,
-          pos: new THREE.Vector3(0, tEnd * 0.72, r2 * 1.05).applyEuler(
-            new THREE.Euler(phiAngle, 0, 0),
-          ),
+          pos: new THREE.Vector3(0, tEnd, 0).applyEuler(new THREE.Euler(phiAngle, 0, 0)),
           color: "var(--ember)",
+          dy: -48,
         });
       }
 
@@ -452,10 +495,19 @@
       annotGroup.add(
         axisLine(new THREE.Vector3(0, -axisLen, 0), new THREE.Vector3(0, axisLen, 0), pal.axisMain),
       );
+      // Diameter line across the bottom rim, label leadered to its middle.
+      annotGroup.add(
+        axisLine(
+          new THREE.Vector3(-r1, -heightMain / 2, 0),
+          new THREE.Vector3(r1, -heightMain / 2, 0),
+          pal.axisMain,
+        ),
+      );
       anchors.push({
         text: `Ø₁ ${(r1 * 2).toFixed(1)} mm`,
-        pos: new THREE.Vector3(r1 * 0.55, -heightMain * 0.4, r1 * 0.7),
+        pos: new THREE.Vector3(0, -heightMain / 2, 0),
         color: "var(--cyan)",
+        dy: 42,
       });
     } else {
       // Cylinder × plane: the tube stops exactly at the cut.
@@ -608,18 +660,32 @@
       const v = new THREE.Vector3();
       ctx.font = "500 24px 'JetBrains Mono', monospace";
       ctx.textBaseline = "middle";
+      const leaderColor = light ? "rgba(20,20,25,0.45)" : "rgba(245,245,247,0.45)";
       for (const a of anchors) {
         v.copy(a.pos).project(shotCamera);
         if (v.z >= 1 || Math.abs(v.x) > 1.1 || Math.abs(v.y) > 1.1) continue;
         const x = ((v.x + 1) / 2) * W;
         const y = ((1 - v.y) / 2) * H;
+        const cx = x + (a.dx ?? 0) * 1.4;
+        const cy = y + (a.dy ?? -46) * 1.4;
         const tw = ctx.measureText(a.text).width;
-        ctx.fillStyle = light ? "rgba(255,255,255,0.85)" : "rgba(6,6,8,0.6)";
+        // leader + anchor dot, then the chip
+        ctx.strokeStyle = leaderColor;
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.roundRect(x - tw / 2 - 12, y - 38, tw + 24, 34, 17);
+        ctx.moveTo(x, y);
+        ctx.lineTo(cx, cy + (cy < y ? 17 : -17));
+        ctx.stroke();
+        ctx.fillStyle = leaderColor;
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.fillStyle = light ? "rgba(255,255,255,0.88)" : "rgba(6,6,8,0.65)";
+        ctx.beginPath();
+        ctx.roundRect(cx - tw / 2 - 12, cy - 17, tw + 24, 34, 17);
         ctx.fill();
         ctx.fillStyle = resolveCssColor(a.color);
-        ctx.fillText(a.text, x - tw / 2, y - 21);
+        ctx.fillText(a.text, cx - tw / 2, cy);
       }
 
       const a = document.createElement("a");
@@ -728,6 +794,7 @@
 
 <div class="absolute inset-0">
   <div bind:this={container} class="w-full h-full"></div>
+  <svg bind:this={leadersEl} class="absolute inset-0 w-full h-full pointer-events-none"></svg>
   <div bind:this={labelsEl} class="absolute inset-0 overflow-hidden pointer-events-none"></div>
 
   <!-- Bottom toolbar -->

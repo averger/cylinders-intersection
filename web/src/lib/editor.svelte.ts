@@ -8,6 +8,7 @@ import { store } from "./store.svelte";
 import {
   exportApi,
   planTiles,
+  tileLabel,
   type ExportDocument,
   type Layers,
   type PageSpec,
@@ -108,13 +109,69 @@ class EditorStore {
     if (!store.result) return 0;
     if (this.scale === "fit") return this.available.length;
     let pages = 0;
-    for (const kind of this.available) {
-      const box = this.patternBox(kind);
-      if (!box) continue;
-      const plan = planTiles(this.page, box.w, box.h);
-      pages += plan.cols * plan.rows;
-    }
+    for (const kind of this.available) pages += this.tiles(kind).length;
     return pages;
+  }
+
+  /** Points of a pattern's cut curve. */
+  private cutPoints(kind: PatternKind): { u: number; v: number }[] {
+    const r = store.result;
+    if (!r) return [];
+    const pts = kind === "branch" ? r.dev_branch : r.dev_main;
+    return pts ?? [];
+  }
+
+  /**
+   * Bounding box of what must reach the paper: cut curve + annotations.
+   * Twin of the backend `Sheet::cut_bbox`.
+   */
+  cutBox(kind: PatternKind): { uMin: number; vMin: number; uMax: number; vMax: number } | null {
+    const pts = this.cutPoints(kind);
+    if (pts.length === 0) return null;
+    let uMin = pts[0].u,
+      uMax = uMin,
+      vMin = pts[0].v,
+      vMax = vMin;
+    for (const p of pts) {
+      if (p.u < uMin) uMin = p.u;
+      if (p.u > uMax) uMax = p.u;
+      if (p.v < vMin) vMin = p.v;
+      if (p.v > vMax) vMax = p.v;
+    }
+    for (const a of this.annotations) {
+      if (a.pattern !== kind) continue;
+      uMin = Math.min(uMin, a.u);
+      uMax = Math.max(uMax, a.u);
+      vMin = Math.min(vMin, a.v);
+      vMax = Math.max(vMax, a.v);
+    }
+    return { uMin, vMin, uMax, vMax };
+  }
+
+  /**
+   * Non-empty 1:1 tiles for a pattern, in pattern coordinates — the exact
+   * pages the backend will emit (empty tiles are skipped on both sides).
+   */
+  tiles(kind: PatternKind): { u0: number; vTop: number; w: number; h: number; label: string }[] {
+    const box = this.cutBox(kind);
+    if (!box || this.scale !== "one_to_one") return [];
+    const plan = planTiles(this.page, box.uMax - box.uMin, box.vMax - box.vMin);
+    const pts = this.cutPoints(kind);
+    const annots = this.annotations.filter((a) => a.pattern === kind);
+    const out: { u0: number; vTop: number; w: number; h: number; label: string }[] = [];
+    for (let row = 0; row < plan.rows; row++) {
+      for (let col = 0; col < plan.cols; col++) {
+        const u0 = box.uMin + col * plan.stepX;
+        const vTop = box.vMax - row * plan.stepY;
+        const m = plan.overlap;
+        const inside = (u: number, v: number) =>
+          u >= u0 - m && u <= u0 + plan.viewW + m && v >= vTop - plan.viewH - m && v <= vTop + m;
+        const has =
+          pts.some((p) => inside(p.u, p.v)) || annots.some((a) => inside(a.u, a.v));
+        if (has) out.push({ u0, vTop, w: plan.viewW, h: plan.viewH, label: tileLabel(col, row) });
+      }
+    }
+    return out;
   }
 
   /** Drawing extents of a pattern (mm), circumference included. */

@@ -5,7 +5,7 @@
 
   const viewOptions = [
     { label: "3D", value: "3d" as View },
-    { label: "2D · éditeur", value: "2d" as View },
+    { label: "2D", value: "2d" as View },
   ];
 </script>
 

@@ -183,7 +183,23 @@ pub struct Sheet {
     pub axis_u: f64,
     /// Overall bounding box of everything drawable: (u_min, v_min, u_max, v_max).
     pub bbox: (f64, f64, f64, f64),
+    /// Bounding box of what must actually reach the paper at 1:1 — the cut
+    /// curve and the annotations.  The 1:1 tiling covers THIS box, so no
+    /// page is wasted on the empty part of the unwrapped frame.
+    pub cut_bbox: (f64, f64, f64, f64),
     pub annotations: Vec<Annotation>,
+}
+
+impl Sheet {
+    /// Whether the rectangle `(u0..u0+w, v0..v0+h)`, grown by `margin`,
+    /// contains any part of the cut curve or an annotation anchor.
+    pub fn rect_has_content(&self, u0: f64, v0: f64, w: f64, h: f64, margin: f64) -> bool {
+        let (lo_u, hi_u) = (u0 - margin, u0 + w + margin);
+        let (lo_v, hi_v) = (v0 - margin, v0 + h + margin);
+        let inside = |u: f64, v: f64| u >= lo_u && u <= hi_u && v >= lo_v && v <= hi_v;
+        self.cut.iter().any(|&(u, v)| inside(u, v))
+            || self.annotations.iter().any(|a| inside(a.u, a.v))
+    }
 }
 
 /// Errors surfaced to the API layer.
@@ -275,6 +291,22 @@ fn layout_sheet(
 
     let bbox = (u_min, v_min, u_min + frame_w, v_max);
 
+    let annotations: Vec<Annotation> = doc
+        .annotations
+        .iter()
+        .filter(|a| a.pattern == kind)
+        .cloned()
+        .collect();
+
+    // What must land on paper: the curve itself plus annotation anchors.
+    let mut cut_bbox = (u_min, v_min, u_max, v_max);
+    for a in &annotations {
+        cut_bbox.0 = cut_bbox.0.min(a.u);
+        cut_bbox.1 = cut_bbox.1.min(a.v);
+        cut_bbox.2 = cut_bbox.2.max(a.u);
+        cut_bbox.3 = cut_bbox.3.max(a.v);
+    }
+
     let phi_deg = payload.phi.to_degrees();
     let meta = match kind {
         PatternKind::Branch => format!(
@@ -285,13 +317,6 @@ fn layout_sheet(
         ),
     };
 
-    let annotations = doc
-        .annotations
-        .iter()
-        .filter(|a| a.pattern == kind)
-        .cloned()
-        .collect();
-
     Ok(Sheet {
         kind,
         name: name.to_string(),
@@ -301,6 +326,7 @@ fn layout_sheet(
         frame,
         axis_u: 0.0,
         bbox,
+        cut_bbox,
         annotations,
     })
 }
