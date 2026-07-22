@@ -1,4 +1,8 @@
+<img src="docs/brand/cylix-logo.svg" width="72" alt="Cylix" align="left" style="margin-right:14px" />
+
 # Cylix — gabarits de découpe de cylindres à l'échelle 1:1
+
+<br clear="left" />
 
 *Moteur exact d'intersections de cylindres (gueule de loup, coupe en sifflet) et
 outil de production des développés : deux mises à plat — une par cylindre —
