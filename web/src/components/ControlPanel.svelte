@@ -1,6 +1,7 @@
 <script lang="ts">
   import Slider from "./Slider.svelte";
   import Segmented from "./Segmented.svelte";
+  import Switch from "./Switch.svelte";
   import ExportPanel from "./ExportPanel.svelte";
   import { store, type Mode } from "../lib/store.svelte";
   import type { Branch } from "../lib/api";
@@ -85,21 +86,23 @@
       />
 
       {#if p.mode === "cyl_plane"}
-        <label class="flex items-center gap-2 cursor-pointer text-[12px] text-silver -mt-1">
-          <input
-            type="checkbox"
-            class="accent-[#ff5b1a] w-3.5 h-3.5"
+        <div class="flex items-center justify-between -mt-1">
+          <div class="leading-tight">
+            <div class="text-[12px] text-silver">Plan orienté</div>
+            <div class="text-[10px] text-ash/70">second angle φy</div>
+          </div>
+          <Switch
             checked={showPhiY}
-            onchange={(e) => {
-              showPhiY = (e.currentTarget as HTMLInputElement).checked;
-              if (!showPhiY && store.params.angleYDeg !== 0) {
+            label="Plan orienté — second angle φy"
+            onchange={(v) => {
+              showPhiY = v;
+              if (!v && store.params.angleYDeg !== 0) {
                 store.params = { ...store.params, angleYDeg: 0 };
                 store.compute();
               }
             }}
           />
-          Plan orienté — second angle φy (rare)
-        </label>
+        </div>
         {#if showPhiY}
           <Slider
             label="Inclinaison selon Y · φy"
