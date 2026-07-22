@@ -10,6 +10,7 @@
     "check": "svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
+    "katex": "^0.16.21",
     "three": "0.171.0"
   },
   "devDependencies": {

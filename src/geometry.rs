@@ -16,19 +16,14 @@
 use nalgebra::{Matrix3, Vector3};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Branch {
     /// `+sqrt(Δ)` root — the outer (entry side) curve.
+    #[default]
     Outer,
     /// `-sqrt(Δ)` root — the inner (exit side) curve.
     Inner,
-}
-
-impl Default for Branch {
-    fn default() -> Self {
-        Branch::Outer
-    }
 }
 
 /// 3D point used for plotting and SVG export.

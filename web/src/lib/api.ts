@@ -28,6 +28,7 @@ export interface IntersectionPayload {
   curve3d: Point3[];
   dev_branch: DevPoint[];
   dev_main: DevPoint[] | null;
+  dev_main_closed: boolean;
   bbox_branch: BBox2 | null;
   bbox_main: BBox2 | null;
   circumference_branch: number | null;

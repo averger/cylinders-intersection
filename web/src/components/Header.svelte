@@ -36,7 +36,8 @@
     <nav class="hidden md:flex items-center gap-1 ml-6 text-sm text-silver">
       <a href="#scene" class="px-3 py-1.5 rounded-full hover:text-pearl hover:bg-white/5 transition">Scène 3D</a>
       <a href="#patterns" class="px-3 py-1.5 rounded-full hover:text-pearl hover:bg-white/5 transition">Développés</a>
-      <a href="#print" class="px-3 py-1.5 rounded-full hover:text-pearl hover:bg-white/5 transition">Impression</a>
+      <a href="#studio" class="px-3 py-1.5 rounded-full hover:text-pearl hover:bg-white/5 transition">Atelier</a>
+      <a href="#theorie" class="px-3 py-1.5 rounded-full hover:text-pearl hover:bg-white/5 transition">Théorie</a>
     </nav>
 
     <div class="ml-auto flex items-center gap-3">

@@ -6,6 +6,23 @@
 
 ---
 
+> 📐 **Théorie complète** : la dérivation intégrale (discriminant en forme fermée,
+> isométrie du développé, gueule de loup, cas limites de Steinmetz, bornes
+> d'erreur de discrétisation) est dans **[`docs/THEORY.md`](docs/THEORY.md)** —
+> c'est le document de référence du moteur. Un aperçu interactif (KaTeX) est
+> intégré à l'application, section **Théorie**.
+
+## Aperçu
+
+Captures Full HD (1920×1080), prêtes pour les réseaux sociaux — dossier
+[`docs/screenshots/`](docs/screenshots/) :
+
+| | |
+|---|---|
+| ![Accueil et scène 3D](docs/screenshots/01-hero.png) | ![Vue 3D temps réel](docs/screenshots/02-scene3d.png) |
+| ![Développés à plat](docs/screenshots/03-developpes.png) | ![Atelier d'export](docs/screenshots/04-atelier.png) |
+| ![Aperçu de la théorie](docs/screenshots/05-theorie.png) | |
+
 ## 1) Théorie (version courte mais complète)
 
 ### Modèle géométrique
@@ -110,10 +127,20 @@ où $\alpha^\uparrow$ est l’angle **déroulé** (*unwrap*) pour supprimer le s
 
 L’implémentation de référence est désormais une application autonome — moteur géométrique en **Rust** (Axum + nalgebra), interface **Svelte 5 + Tailwind 4** servie en SPA, vue 3D **Three.js**.
 
-* Calcul matriciel côté serveur (binaire compilé).
+* Calcul matriciel côté serveur (binaire compilé, formules fermées — cf. `docs/THEORY.md`).
 * Choix entre **cylindre × cylindre** et **cylindre × plan incliné**.
-* Export **SVG vectoriel à l’échelle 1 : 1** et **CSV** brut pour CNC / laser / découpe plasma.
-* Mode impression dédié, avec règle de référence 100 mm pour vérifier le scaling de l’imprimante.
+* **Vue 3D temps réel** (Three.js) : orbite, rotation auto, capture **PNG 1920×1080** intégrée.
+* **Atelier d'export** : éditeur SVG avant export — calques (grille 10 mm, emprise,
+  génératrices 90°, étiquettes, règle), annotations déplaçables à la souris,
+  cartouche, format A4/A3/A2, portrait/paysage.
+* Export **PDF vectoriel mm-exact** : échelle 1:1 **tuilée** sur plusieurs pages avec
+  repères de collage (tuiles A1, B1, …), traits de coupe, cartouche et règle de
+  contrôle 100 mm — ou mode « ajusté » une page avec échelle affichée.
+* Export **DXF R12** (calques `CUT` / `FRAME` / `AXIS` / `TEXT` / `ANNOT`, unités mm)
+  pour AutoCAD, QCAD, LibreCAD et chaînes CAM laser/plasma.
+* Export **SVG vectoriel à l’échelle 1 : 1** et **CSV** brut.
+* **Aperçu de la théorie** dans l'app (rendu KaTeX) + mode impression dédié avec
+  règle de référence 100 mm.
 
 ### 2.1 Pré-requis
 
@@ -157,6 +184,24 @@ cd web && npm run dev
 | `GET`   | `/api/health`                  | —                                                  | `{name, version, uptime_ms}` |
 | `POST`  | `/api/intersect/cyl-cyl`       | `{r1, r2, phi, n_samples?, branch?}`               | `IntersectionPayload`  |
 | `POST`  | `/api/intersect/cyl-plane`     | `{r1, phi, z0?, n_samples?}`                       | `IntersectionPayload`  |
+| `POST`  | `/api/export/pdf`              | `ExportDocument` (cf. ci-dessous)                  | `application/pdf`      |
+| `POST`  | `/api/export/dxf`              | `ExportDocument`                                   | `application/dxf` (R12)|
+
+`ExportDocument` — le modèle produit par l'atelier d'export (le backend recalcule
+la géométrie depuis `source`, seule source de vérité) :
+
+```jsonc
+{
+  "source":   { "mode": "cyl_cyl", "r1": 50, "r2": 35, "phi": 0.785, "n_samples": 1440, "branch": "outer" },
+  "page":     { "format": "a4" | "a3" | "a2", "orientation": "portrait" | "landscape", "margin_mm": 10 },
+  "scale":    "one_to_one" | "fit",          // 1:1 tuilé  |  ajusté 1 page
+  "layers":   { "grid": true, "frame": true, "axis": true, "labels": true, "scale_bar": true },
+  "title_block": { "title": "", "project": "", "author": "", "date": "", "notes": "" },
+  "annotations": [{ "pattern": "branch" | "main", "u": 30, "v": 10, "text": "…", "size_mm": 4 }],
+  "patterns": ["branch", "main"],
+  "cut_width_mm": 0.35
+}
+```
 
 `IntersectionPayload` :
 
@@ -197,22 +242,32 @@ Exports disponibles depuis chaque carte :
 
 | Format | Usage                                                            |
 |--------|------------------------------------------------------------------|
+| `PDF`  | Impression 1:1 tuilée multi-pages (repères de collage) ou aperçu ajusté — vectoriel, généré par le backend |
+| `DXF`  | AutoCAD, QCAD, LibreCAD, chaînes CAM laser/plasma — R12, calques dédiés, mm |
 | `SVG`  | LightBurn, RDWorks, Inkscape, Illustrator, Fusion 360, Onshape — vectoriel pur |
 | `CSV`  | Colonnes `theta_rad, u_mm, v_mm` — intégration dans un post-processeur CNC |
+| `PNG`  | Capture 3D 1920×1080 (bouton dans la vue 3D) — communication / réseaux sociaux |
 
 ### 2.6 Arborescence
 
 ```
 cylinders-intersection/
 ├── Cargo.toml              # crate cylinders-intersection
+├── docs/
+│   ├── THEORY.md           # dérivation mathématique complète (référence)
+│   └── screenshots/        # captures Full HD 1920×1080 (réseaux sociaux)
 ├── src/
 │   ├── geometry.rs         # rotation X, paramétrisation cyl-2, BBox, unwrap
 │   ├── intersection.rs     # cyl/cyl + cyl/plan + développés (gueule de loup)
+│   ├── export/
+│   │   ├── mod.rs          # modèle ExportDocument, layout, plan de tuilage
+│   │   ├── pdf.rs          # writer PDF vectoriel maison (mm-exact, WinAnsi)
+│   │   └── dxf.rs          # writer DXF R12 ASCII (calques CUT/FRAME/AXIS/…)
 │   ├── api.rs              # routes Axum + SPA fallback
 │   ├── assets.rs           # rust-embed sur web/dist
 │   ├── lib.rs              # re-exports
 │   └── main.rs             # serveur Axum (CLI clap)
-└── web/                    # SPA (Svelte 5 + Tailwind 4 + Three.js)
+└── web/                    # SPA (Svelte 5 + Tailwind 4 + Three.js + KaTeX)
     ├── src/
     │   ├── App.svelte
     │   ├── main.ts
@@ -221,13 +276,17 @@ cylinders-intersection/
     │   │   ├── Header.svelte
     │   │   ├── Hero.svelte
     │   │   ├── ControlPanel.svelte
-    │   │   ├── Viewer3D.svelte         # rendu Three.js
+    │   │   ├── Viewer3D.svelte         # Three.js : orbite, auto-rotation, PNG 1080p
     │   │   ├── DevelopedView.svelte    # SVG mm interactif
+    │   │   ├── ExportStudio.svelte     # éditeur avant export (calques, annotations…)
+    │   │   ├── Theory.svelte           # aperçu de la théorie (KaTeX)
     │   │   ├── PrintLayout.svelte      # rendu impression 1:1
     │   │   ├── Slider.svelte
     │   │   └── Segmented.svelte
     │   └── lib/
     │       ├── api.ts
+    │       ├── export.ts               # modèle ExportDocument (miroir TS) + tuilage
+    │       ├── editor.svelte.ts        # état de l'atelier d'export
     │       ├── store.svelte.ts
     │       └── svg.ts
     ├── vite.config.ts
@@ -243,10 +302,17 @@ Tests unitaires Rust :
 cargo test --release
 ```
 
-Deux cas couverts par défaut :
+Cas couverts :
 
 * **Cylindres égaux à 90°** — la racine `outer` doit atteindre le maximum $v=R_1$ ($\pm 10^{-6}$).
 * **Plan à 45° sur un tube Ø 60 mm** — l’abscisse couvre la totalité de $2\pi R_1$ (à un pas d’échantillonnage près).
+* **Module export** — emprise = périmètre exact, plan de tuilage minimal et suffisant,
+  étiquettes de tuiles A1/B2/…, erreurs propres pour motifs indisponibles.
+* **PDF** — squelette structurel valide (catalog, xref pointant octet par octet sur les
+  objets), une page par motif en mode ajusté, tuiles en 1:1, échappement WinAnsi
+  (accents, parenthèses, °).
+* **DXF** — sections HEADER/TABLES/ENTITIES bien formées, `POLYLINE`/`SEQEND` appariés,
+  drapeau « fermé » sur les contours fermés, sortie 100 % ASCII.
 
 ### 2.8 Script Python historique (legacy)
 

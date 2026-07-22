@@ -5,6 +5,8 @@
   import ControlPanel from "./components/ControlPanel.svelte";
   import Viewer3D from "./components/Viewer3D.svelte";
   import DevelopedView from "./components/DevelopedView.svelte";
+  import ExportStudio from "./components/ExportStudio.svelte";
+  import Theory from "./components/Theory.svelte";
   import PrintLayout from "./components/PrintLayout.svelte";
   import { store } from "./lib/store.svelte";
 
@@ -45,8 +47,9 @@
         </h2>
         <p class="text-ash text-sm max-w-2xl mt-1">
           Le développé est l’unwrap métrique du cylindre.  L’abscisse est la longueur
-          d’arc, l’ordonnée est la coordonnée axiale.  Tracez ces courbes au feutre
-          fin, ou exportez-les en SVG vectoriel pour DXF/CNC/laser.
+          d’arc, l’ordonnée est la coordonnée axiale.  Exportez chaque courbe en SVG,
+          ou passez par l’<a href="#studio" class="text-ember hover:text-ember-soft transition-colors">atelier</a>
+          pour annoter puis produire le PDF tuilé 1:1 ou le DXF CAO.
         </p>
       </div>
       <div class="flex items-center gap-3 text-[11px] text-ash">
@@ -85,7 +88,7 @@
             points={store.result.dev_main}
             diameter={store.result.r1 * 2}
             circumference={store.result.circumference_main}
-            closed={false}
+            closed={store.result.dev_main_closed}
             accent="#29c2ff"
             filename="gueule-de-loup"
           />
@@ -94,8 +97,14 @@
     {/if}
   </section>
 
+  <!-- Export studio: edit the SVG before producing PDF / DXF -->
+  <ExportStudio />
+
+  <!-- Theory preview -->
+  <Theory />
+
   <!-- Print preview -->
-  <section class="max-w-[1600px] mx-auto px-6 lg:px-10 pb-24">
+  <section id="print" class="max-w-[1600px] mx-auto px-6 lg:px-10 pb-24">
     <div class="mb-6">
       <span class="pill">impression CNC / fabrication</span>
       <h2 class="text-pearl text-2xl lg:text-3xl font-semibold tracking-tight mt-2">

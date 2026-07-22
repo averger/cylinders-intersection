@@ -13,6 +13,7 @@ use axum::{
 use serde::Serialize;
 
 use crate::assets::Assets;
+use crate::export::{render_dxf, render_pdf, ExportDocument, ExportError};
 use crate::intersection::{cyl_cyl, cyl_plane, CylCylInput, CylPlaneInput, IntersectionPayload};
 
 #[derive(Clone)]
@@ -25,6 +26,12 @@ impl AppState {
         Self {
             started_at: Arc::new(std::time::Instant::now()),
         }
+    }
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -41,6 +48,8 @@ pub fn router() -> Router {
         .route("/api/health", get(health))
         .route("/api/intersect/cyl-cyl", post(api_cyl_cyl))
         .route("/api/intersect/cyl-plane", post(api_cyl_plane))
+        .route("/api/export/pdf", post(api_export_pdf))
+        .route("/api/export/dxf", post(api_export_dxf))
         .fallback(static_fallback)
         .with_state(state)
 }
@@ -74,6 +83,44 @@ async fn api_cyl_plane(Json(input): Json<CylPlaneInput>) -> Result<Json<Intersec
         ));
     }
     Ok(Json(cyl_plane(input)))
+}
+
+async fn api_export_pdf(Json(doc): Json<ExportDocument>) -> Result<Response, ApiError> {
+    let bytes = render_pdf(&doc).map_err(ApiError::from)?;
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "application/pdf".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                "attachment; filename=\"gabarits.pdf\"".to_string(),
+            ),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+async fn api_export_dxf(Json(doc): Json<ExportDocument>) -> Result<Response, ApiError> {
+    let dxf = render_dxf(&doc).map_err(ApiError::from)?;
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "application/dxf".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                "attachment; filename=\"gabarits.dxf\"".to_string(),
+            ),
+        ],
+        dxf,
+    )
+        .into_response())
+}
+
+impl From<ExportError> for ApiError {
+    fn from(e: ExportError) -> Self {
+        ApiError::bad_request(e.to_string())
+    }
 }
 
 #[derive(Debug)]

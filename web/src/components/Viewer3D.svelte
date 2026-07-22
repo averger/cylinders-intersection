@@ -25,6 +25,8 @@
   let dragging = false;
   let lastX = 0,
     lastY = 0;
+  let autoRotate = $state(true);
+  let capturing = $state(false);
 
   function setCamera() {
     if (!camera) return;
@@ -171,8 +173,42 @@
   }
 
   function tick() {
+    if (autoRotate && !dragging) {
+      theta += 0.0022;
+      setCamera();
+    }
     if (renderer && scene && camera) renderer.render(scene, camera);
     raf = requestAnimationFrame(tick);
+  }
+
+  /// Render one Full HD frame off-screen and download it as PNG — ready for
+  /// social media (1920×1080, transparent UI removed, deep-space backdrop).
+  function capturePNG() {
+    if (!scene || !camera || capturing) return;
+    capturing = true;
+    try {
+      const W = 1920,
+        H = 1080;
+      const shotRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      shotRenderer.setPixelRatio(1);
+      shotRenderer.setSize(W, H, false);
+      shotRenderer.outputColorSpace = THREE.SRGBColorSpace;
+      shotRenderer.setClearColor(new THREE.Color("#0a0a0b"), 1);
+      const shotCamera = camera.clone();
+      shotCamera.aspect = W / H;
+      shotCamera.updateProjectionMatrix();
+      shotRenderer.render(scene, shotCamera);
+      const url = shotRenderer.domElement.toDataURL("image/png");
+      shotRenderer.dispose();
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "intersection-3d-1920x1080.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } finally {
+      capturing = false;
+    }
   }
 
   onMount(() => {
@@ -226,6 +262,7 @@
 
     el.addEventListener("pointerdown", (e: PointerEvent) => {
       dragging = true;
+      autoRotate = false;
       el.setPointerCapture(e.pointerId);
       el.style.cursor = "grabbing";
       lastX = e.clientX;
@@ -290,6 +327,26 @@
         φ = {((store.result.phi * 180) / Math.PI).toFixed(2)}°
       {/if}
     </div>
+  </div>
+
+  <!-- Bottom toolbar -->
+  <div class="absolute left-4 bottom-4 flex items-center gap-2">
+    <button
+      class="pill hover:border-white/25 transition-colors {autoRotate ? 'text-pearl' : ''}"
+      style={autoRotate ? "border-color: rgba(255,91,26,0.45)" : ""}
+      onclick={() => (autoRotate = !autoRotate)}
+      aria-pressed={autoRotate}
+    >
+      ⟳ rotation {autoRotate ? "on" : "off"}
+    </button>
+    <button
+      class="pill hover:border-white/25 transition-colors"
+      onclick={capturePNG}
+      disabled={capturing}
+      aria-label="Capturer la scène en PNG 1920×1080"
+    >
+      ◉ png · 1920×1080
+    </button>
   </div>
 
   <!-- Loading shimmer -->

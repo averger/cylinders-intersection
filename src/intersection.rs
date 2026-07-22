@@ -63,8 +63,13 @@ pub struct IntersectionPayload {
     /// the abscissa, axial coordinate on the ordinate, both in millimetres.
     pub dev_branch: Vec<DevPoint>,
     /// "Gueule de loup" pattern on cylinder 1.  Always present when both
-    /// cylinders are involved; `None` for the cyl/plane mode.
+    /// cylinders are involved; `None` for the cyl/plane mode.  Points keep
+    /// the θ traversal order so the polyline follows the actual contour.
     pub dev_main: Option<Vec<DevPoint>>,
+    /// Whether `dev_main` is a closed loop.  True for a full penetration
+    /// (`r2 ≤ r1`, the opening is a closed "egg"); false when the curve
+    /// wraps around the whole main cylinder (`r2 > r1`).
+    pub dev_main_closed: bool,
     /// Bounding boxes (mm) for layout & SVG sizing.
     pub bbox_branch: Option<BBox2>,
     pub bbox_main: Option<BBox2>,
@@ -122,22 +127,20 @@ pub fn cyl_cyl(input: CylCylInput) -> IntersectionPayload {
         }
     }
 
-    // "Gueule de loup": unwrap α on cylinder 1, then sort by `u1 = R1·α`.
-    let dev_main = if alphas.is_empty() {
-        None
+    // "Gueule de loup": unwrap α on cylinder 1 and keep the θ traversal
+    // order — the samples then follow the physical contour of the opening
+    // (sorting by `u` would interleave the two lips into a zigzag).
+    let (dev_main, dev_main_closed) = if alphas.is_empty() {
+        (None, false)
     } else {
         let alpha_unwrapped = unwrap_angles(&alphas);
-        let mut tmp: Vec<(f64, f64)> = alpha_unwrapped
+        let pts = alpha_unwrapped
             .into_iter()
             .zip(zs.iter().copied())
-            .map(|(alpha, z)| (r1 * alpha, z))
-            .collect();
-        tmp.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-        Some(
-            tmp.into_iter()
-                .map(|(u, v)| DevPoint { theta: u / r1, u, v })
-                .collect::<Vec<_>>(),
-        )
+            .map(|(alpha, z)| DevPoint { theta: alpha, u: r1 * alpha, v: z })
+            .collect::<Vec<_>>();
+        let closed = polyline_is_loop(&pts_uv(&pts));
+        (Some(pts), closed)
     };
 
     let bbox_branch = BBox2::from_points(dev_branch.iter().map(|p| (p.u, p.v)));
@@ -154,11 +157,34 @@ pub fn cyl_cyl(input: CylCylInput) -> IntersectionPayload {
         curve3d,
         dev_branch,
         dev_main,
+        dev_main_closed,
         bbox_branch,
         bbox_main,
         circumference_branch: Some(std::f64::consts::TAU * r2),
         circumference_main: std::f64::consts::TAU * r1,
     }
+}
+
+fn pts_uv(pts: &[DevPoint]) -> Vec<(f64, f64)> {
+    pts.iter().map(|p| (p.u, p.v)).collect()
+}
+
+/// Whether a developed polyline in traversal order forms a closed loop:
+/// the gap between its endpoints must be comparable to the sampling step,
+/// not to the size of the pattern.
+fn polyline_is_loop(pts: &[(f64, f64)]) -> bool {
+    if pts.len() < 8 {
+        return false;
+    }
+    let (fu, fv) = pts[0];
+    let (lu, lv) = pts[pts.len() - 1];
+    let gap = ((lu - fu).powi(2) + (lv - fv).powi(2)).sqrt();
+    let total: f64 = pts
+        .windows(2)
+        .map(|w| ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt())
+        .sum();
+    let mean_step = total / (pts.len() - 1) as f64;
+    gap <= 5.0 * mean_step.max(1e-9)
 }
 
 /// Cylinder–plane intersection: a single tube cut by an inclined plane.
@@ -194,6 +220,7 @@ pub fn cyl_plane(input: CylPlaneInput) -> IntersectionPayload {
         curve3d,
         dev_branch,
         dev_main: None,
+        dev_main_closed: false,
         bbox_branch,
         bbox_main: None,
         circumference_branch: Some(std::f64::consts::TAU * r1),
@@ -220,6 +247,47 @@ mod tests {
         assert!(!res.dev_branch.is_empty());
         let v_max = res.dev_branch.iter().map(|p| p.v).fold(f64::MIN, f64::max);
         assert!((v_max - 50.0).abs() < 1e-6, "v_max = {v_max}");
+    }
+
+    #[test]
+    fn gueule_de_loup_is_a_closed_contour_for_full_penetration() {
+        // r2 < r1: the opening is a closed loop and consecutive samples must
+        // stay close to each other (no zigzag between the two lips).
+        let res = cyl_cyl(CylCylInput {
+            r1: 50.0,
+            r2: 35.0,
+            phi: std::f64::consts::FRAC_PI_4,
+            n_samples: 1440,
+            branch: Branch::Outer,
+        });
+        assert!(res.dev_main_closed);
+        let pts = res.dev_main.unwrap();
+        let (mut max_seg, mut span_u) = (0.0f64, 0.0f64);
+        for w in pts.windows(2) {
+            let d = ((w[1].u - w[0].u).powi(2) + (w[1].v - w[0].v).powi(2)).sqrt();
+            max_seg = max_seg.max(d);
+        }
+        for p in &pts {
+            span_u = span_u.max(p.u.abs());
+        }
+        // A contour in traversal order has tiny segments; the sorted zigzag
+        // of the old implementation produced segments spanning the height.
+        assert!(max_seg < 2.0, "max segment = {max_seg} mm");
+        assert!(span_u > 10.0);
+    }
+
+    #[test]
+    fn gueule_de_loup_wraps_open_when_branch_is_larger() {
+        // r2 > r1: the intersection circles the main cylinder — not a loop
+        // in the developed plane.
+        let res = cyl_cyl(CylCylInput {
+            r1: 30.0,
+            r2: 45.0,
+            phi: std::f64::consts::FRAC_PI_3,
+            n_samples: 1440,
+            branch: Branch::Outer,
+        });
+        assert!(!res.dev_main_closed);
     }
 
     #[test]
