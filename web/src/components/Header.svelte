@@ -2,6 +2,7 @@
   // Compact tool header: brand, view toggle, actions.
   import Segmented from "./Segmented.svelte";
   import { store, type View } from "../lib/store.svelte";
+  import { editor } from "../lib/editor.svelte";
 
   const viewOptions = [
     { label: "3D", value: "3d" as View },
@@ -62,7 +63,13 @@
           </svg>
         {/if}
       </button>
-      <button class="btn-ghost !py-2 text-sm" onclick={() => window.print()} aria-label="Imprimer 1:1">
+      <button
+        class="btn-primary !py-2 text-sm"
+        disabled={editor.busy !== null || !store.result}
+        onclick={() => editor.exportPdf()}
+        aria-label="Exporter le PDF 1:1"
+        title="Exporter le PDF vectoriel à l'échelle 1:1"
+      >
         <svg
           viewBox="0 0 24 24"
           class="w-4 h-4 fill-none stroke-current"
@@ -70,11 +77,11 @@
           stroke-linecap="round"
           stroke-linejoin="round"
         >
-          <path d="M6 9V3h12v6" />
-          <rect x="4" y="9" width="16" height="9" rx="2" />
-          <path d="M8 14h8v6H8z" />
+          <path d="M12 3v12" />
+          <path d="m7 10 5 5 5-5" />
+          <path d="M4 19h16" />
         </svg>
-        Imprimer
+        {editor.busy === "pdf" ? "export…" : "Exporter"}
       </button>
     </div>
   </div>

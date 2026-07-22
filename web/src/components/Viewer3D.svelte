@@ -309,6 +309,99 @@
     return new THREE.Mesh(geom, mat);
   }
 
+  /**
+   * Protractor-style angle marker: filled annular sector swept by `dirFn`
+   * over [0, sweep], arc outline and arrowheads at both ends.
+   */
+  function angleSector(
+    origin: THREE.Vector3,
+    dirFn: (s: number) => THREE.Vector3,
+    sweep: number,
+    rIn: number,
+    rOut: number,
+    color: number,
+  ): THREE.Group {
+    const g = new THREE.Group();
+    const steps = 56;
+
+    const positions: number[] = [];
+    const indices: number[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const d = dirFn((sweep * i) / steps);
+      const a = origin.clone().addScaledVector(d, rIn);
+      const b = origin.clone().addScaledVector(d, rOut);
+      positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+      if (i < steps) {
+        const k = 2 * i;
+        indices.push(k, k + 2, k + 1, k + 2, k + 3, k + 1);
+      }
+    }
+    const fanGeom = new THREE.BufferGeometry();
+    fanGeom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    fanGeom.setIndex(indices);
+    fanGeom.computeVertexNormals();
+    // CAD-dimension style: the angle annotation always reads on top.
+    const fanMesh = new THREE.Mesh(
+      fanGeom,
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.2,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: false,
+      }),
+    );
+    fanMesh.renderOrder = 990;
+    g.add(fanMesh);
+
+    const arcPts: THREE.Vector3[] = [];
+    for (let i = 0; i <= steps; i++) {
+      arcPts.push(origin.clone().addScaledVector(dirFn((sweep * i) / steps), rOut));
+    }
+    const arcLine = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(arcPts),
+      new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95, depthTest: false }),
+    );
+    arcLine.renderOrder = 991;
+    g.add(arcLine);
+    // radial edges
+    for (const sEdge of [0, sweep]) {
+      const edge = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([
+          origin.clone(),
+          origin.clone().addScaledVector(dirFn(sEdge), rOut),
+        ]),
+        new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7, depthTest: false }),
+      );
+      edge.renderOrder = 991;
+      g.add(edge);
+    }
+    // arrowheads, tangent to the arc
+    const headLen = Math.max(rOut * 0.055, 4);
+    for (const [sTip, sign] of [
+      [0, -1],
+      [sweep, 1],
+    ] as [number, number][]) {
+      const tip = origin.clone().addScaledVector(dirFn(sTip), rOut);
+      const eps = 0.02;
+      const tangent = origin
+        .clone()
+        .addScaledVector(dirFn(sTip + sign * eps), rOut)
+        .sub(tip)
+        .normalize();
+      const cone = new THREE.Mesh(
+        new THREE.ConeGeometry(headLen * 0.42, headLen, 12),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, depthTest: false }),
+      );
+      cone.renderOrder = 992;
+      cone.position.copy(tip);
+      cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
+      g.add(cone);
+    }
+    return g;
+  }
+
   function axisLine(from: THREE.Vector3, to: THREE.Vector3, color: number): THREE.Line {
     const geom = new THREE.BufferGeometry().setFromPoints([from, to]);
     const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.5 });
@@ -581,30 +674,52 @@
       });
     }
 
-    // Angle arc between the two axes (in the x = 0 plane).
+    // The φ angle, protractor-style — THE parameter of the study must be
+    // unmistakable: filled sector between the two axes, arrows, bold chip.
     if (Math.abs(phiAngle) > 1e-3 && payload.mode === "cyl_cyl") {
-      const rArc = Math.max(r1 * 1.9, (payload.r2 ?? 0) * 1.9, 55);
-      const arcPts: THREE.Vector3[] = [];
-      for (let i = 0; i <= 48; i++) {
-        const s = (phiAngle * i) / 48;
-        arcPts.push(new THREE.Vector3(0, Math.cos(s) * rArc, Math.sin(s) * rArc));
-      }
-      const arc = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(arcPts),
-        new THREE.LineBasicMaterial({ color: pal.arc, transparent: true, opacity: 0.8 }),
+      const rArc = Math.max(r1 * 1.95, (payload.r2 ?? 0) * 1.95, 60);
+      const emberCol = palette().curve;
+      annotGroup.add(
+        angleSector(
+          new THREE.Vector3(0, 0, 0),
+          (sA) => new THREE.Vector3(0, Math.cos(sA), Math.sin(sA)),
+          phiAngle,
+          rArc * 0.55,
+          rArc,
+          emberCol,
+        ),
       );
-      annotGroup.add(arc);
       const midA = phiAngle / 2;
       anchors.push({
         text: `φ = ${((phiAngle * 180) / Math.PI).toFixed(1)}°`,
-        pos: new THREE.Vector3(0, Math.cos(midA) * rArc * 1.18, Math.sin(midA) * rArc * 1.18),
-        color: "var(--text)",
+        pos: new THREE.Vector3(0, Math.cos(midA) * rArc * 0.78, Math.sin(midA) * rArc * 0.78),
+        color: "var(--ember)",
+        dy: 0,
       });
-    } else if (payload.mode === "cyl_plane") {
+    } else if (payload.mode === "cyl_plane" && Math.abs(phiAngle) > 1e-3) {
+      // Sector between the horizontal and the cutting plane, at z0.
+      const rArc = r1 * 1.9;
+      const origin = new THREE.Vector3(0, store.params.z0, 0);
+      const sgn = Math.sign(phiAngle);
+      const emberCol = palette().curve;
+      annotGroup.add(
+        angleSector(
+          origin,
+          (sA) => new THREE.Vector3(0, -Math.sin(sA) * sgn, -Math.cos(sA)),
+          Math.abs(phiAngle),
+          rArc * 0.55,
+          rArc,
+          emberCol,
+        ),
+      );
+      const midA = Math.abs(phiAngle) / 2;
       anchors.push({
         text: `φ = ${((phiAngle * 180) / Math.PI).toFixed(1)}°`,
-        pos: new THREE.Vector3(-r1 * 1.4, store.params.z0 + r1, 0),
-        color: "var(--text)",
+        pos: origin
+          .clone()
+          .add(new THREE.Vector3(0, -Math.sin(midA) * sgn, -Math.cos(midA)).multiplyScalar(rArc * 0.78)),
+        color: "var(--ember)",
+        dy: 0,
       });
     }
 
