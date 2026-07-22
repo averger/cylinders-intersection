@@ -518,23 +518,39 @@
       rg.position.y = bottomZ;
       solidsGroup.add(rg);
 
-      // The cutting plane itself, visible as a large translucent disc.
+      // The cutting plane itself: a pale rectangle with a crisp outline —
+      // unmistakably a plane, clearly visible through the translucency.
       {
-        const discGeom = new THREE.CircleGeometry(r1 * 2.4, 96);
-        const discMat = new THREE.MeshStandardMaterial({
+        const pw = r1 * 5.2;
+        const ph2 = r1 * 3.4;
+        const rectGeom = new THREE.PlaneGeometry(pw, ph2);
+        const rectMat = new THREE.MeshStandardMaterial({
           color: pal.branch,
           transparent: true,
-          opacity: 0.22,
+          opacity: 0.3,
           side: THREE.DoubleSide,
           metalness: 0.05,
-          roughness: 0.7,
+          roughness: 0.75,
           depthWrite: false,
         });
-        const disc = new THREE.Mesh(discGeom, discMat);
+        const rect = new THREE.Mesh(rectGeom, rectMat);
         // three-space plane normal: (0, cosφ, −sinφ).
-        disc.rotation.x = -Math.PI / 2 - phiAngle;
-        disc.position.y = store.params.z0;
-        solidsGroup.add(disc);
+        rect.rotation.x = -Math.PI / 2 - phiAngle;
+        rect.position.y = store.params.z0;
+        solidsGroup.add(rect);
+
+        const border = new THREE.LineLoop(
+          new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(-pw / 2, -ph2 / 2, 0),
+            new THREE.Vector3(pw / 2, -ph2 / 2, 0),
+            new THREE.Vector3(pw / 2, ph2 / 2, 0),
+            new THREE.Vector3(-pw / 2, ph2 / 2, 0),
+          ]),
+          new THREE.LineBasicMaterial({ color: pal.axisBranch, transparent: true, opacity: 0.75 }),
+        );
+        border.rotation.x = -Math.PI / 2 - phiAngle;
+        border.position.y = store.params.z0;
+        solidsGroup.add(border);
       }
 
       const cap = buildPlaneCap(payload);

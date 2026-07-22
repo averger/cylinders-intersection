@@ -71,6 +71,26 @@
     return out;
   });
 
+  // Alignment marks: where each generatrix crosses the cut line (ticks to
+  // match with lines traced on the tube) + the axis-plane datum v = 0.
+  function crossings(g: number): number[] {
+    const n = points.length;
+    if (n < 2) return [];
+    const last = closed ? n : n - 1;
+    const out: number[] = [];
+    for (let i = 0; i < last; i++) {
+      const a = points[i];
+      const b = points[(i + 1) % n];
+      if ((a.u - g) * (b.u - g) < 0) {
+        const t = (g - a.u) / (b.u - a.u);
+        out.push(a.v + t * (b.v - a.v));
+      }
+    }
+    return out;
+  }
+  let ticks = $derived(gens.flatMap((g) => crossings(g.u).map((v) => ({ u: g.u, v }))));
+  let showDatum = $derived(!!box && box.vMin < 0 && box.vMin + box.h > 0);
+
   let viewW = $derived(box ? box.w + MARGIN * 2 : 100);
   let viewH = $derived(box ? box.h + MARGIN * 2 : 60);
 
@@ -181,6 +201,17 @@
             `<text x="${(X(g.u) + 0.8).toFixed(2)}" y="${(Y(box.vMin) - 0.9).toFixed(2)}" font-size="2.4" fill="#555" font-family="Helvetica, Arial, sans-serif">${g.deg}°</text>`,
           );
       }
+      if (showDatum) {
+        parts.push(
+          `<line x1="${X(box.uMin).toFixed(2)}" y1="${Y(0).toFixed(2)}" x2="${X(box.uMin + box.w).toFixed(2)}" y2="${Y(0).toFixed(2)}" stroke="#333" stroke-width="0.1" stroke-dasharray="5 1.6"/>`,
+          `<text x="${(X(box.uMin) + 1).toFixed(2)}" y="${(Y(0) - 0.7).toFixed(2)}" font-size="2" fill="#333" font-family="Helvetica, Arial, sans-serif">réf. plan des axes</text>`,
+        );
+      }
+      for (const t of ticks) {
+        parts.push(
+          `<line x1="${(X(t.u) - 2.5).toFixed(2)}" y1="${Y(t.v).toFixed(2)}" x2="${(X(t.u) + 2.5).toFixed(2)}" y2="${Y(t.v).toFixed(2)}" stroke="#000" stroke-width="0.3"/>`,
+        );
+      }
     }
     parts.push(
       `<path d="${cutPath}" fill="none" stroke="#000" stroke-width="${editor.cutWidth}" stroke-linejoin="round" stroke-linecap="round"/>`,
@@ -285,6 +316,40 @@
               {g.deg}°
             </text>
           {/if}
+        {/each}
+
+        {#if showDatum && box}
+          <line
+            x1={X(box.uMin)}
+            y1={Y(0)}
+            x2={X(box.uMin + box.w)}
+            y2={Y(0)}
+            style="stroke: color-mix(in srgb, var(--text) 40%, transparent)"
+            stroke-width={viewW / 1600}
+            stroke-dasharray="{viewW / 110} {viewW / 260}"
+          />
+          {#if editor.layers.labels}
+            <text
+              x={X(box.uMin) + viewW / 250}
+              y={Y(0) - viewH / 120}
+              font-size={Math.max(1.8, viewW / 110)}
+              style="fill: color-mix(in srgb, var(--text) 55%, transparent)"
+              font-family="JetBrains Mono, monospace"
+            >
+              réf. plan des axes
+            </text>
+          {/if}
+        {/if}
+
+        {#each ticks as t (`${t.u}-${t.v}`)}
+          <line
+            x1={X(t.u) - viewW / 130}
+            y1={Y(t.v)}
+            x2={X(t.u) + viewW / 130}
+            y2={Y(t.v)}
+            style="stroke: var(--text)"
+            stroke-width={viewW / 700}
+          />
         {/each}
       {/if}
 

@@ -181,6 +181,8 @@ pub struct Sheet {
     pub frame: (f64, f64, f64, f64),
     /// `θ = 0` generator abscissa, mm.
     pub axis_u: f64,
+    /// Unwrapped circumference of the tube this pattern wraps onto, mm.
+    pub circumference: f64,
     /// Overall bounding box of everything drawable: (u_min, v_min, u_max, v_max).
     pub bbox: (f64, f64, f64, f64),
     /// Bounding box of what must actually reach the paper at 1:1 — the cut
@@ -199,6 +201,47 @@ impl Sheet {
         let inside = |u: f64, v: f64| u >= lo_u && u <= hi_u && v >= lo_v && v <= hi_v;
         self.cut.iter().any(|&(u, v)| inside(u, v))
             || self.annotations.iter().any(|a| inside(a.u, a.v))
+    }
+
+    /// True tube generatrices (multiples of a quarter turn, `u = 0 ⇔ θ = 0`)
+    /// falling within the drawing extents, with their angle in degrees.
+    pub fn generatrices(&self) -> Vec<(f64, u32)> {
+        let (u0, _, u1, _) = self.bbox;
+        let step = self.circumference / 4.0;
+        if step <= 0.0 {
+            return Vec::new();
+        }
+        let k0 = (u0 / step).floor() as i64;
+        let mut out = Vec::new();
+        let mut k = k0;
+        while (k as f64) * step <= u1 + 1e-9 {
+            let u = (k as f64) * step;
+            if u >= u0 - 1e-9 {
+                out.push((u, (((k * 90) % 360 + 360) % 360) as u32));
+            }
+            k += 1;
+        }
+        out
+    }
+
+    /// `v` values where the cut polyline crosses the vertical line `u = g` —
+    /// the alignment tick positions on a generatrix.
+    pub fn curve_crossings(&self, g: f64) -> Vec<f64> {
+        let mut out = Vec::new();
+        let n = self.cut.len();
+        if n < 2 {
+            return out;
+        }
+        let last = if self.closed { n } else { n - 1 };
+        for i in 0..last {
+            let (ua, va) = self.cut[i];
+            let (ub, vb) = self.cut[(i + 1) % n];
+            if (ua - g) * (ub - g) < 0.0 {
+                let s = (g - ua) / (ub - ua);
+                out.push(va + s * (vb - va));
+            }
+        }
+        out
     }
 }
 
@@ -284,12 +327,19 @@ fn layout_sheet(
         v_max = v_max.max(v);
     }
 
-    // The frame is the full unwrapped footprint of the tube: circumference
-    // wide, pattern-height tall.
-    let frame_w = circumference.max(u_max - u_min);
-    let frame = (u_min, v_min, frame_w, (v_max - v_min).max(0.1));
+    // The frame is the full unwrapped footprint of the tube — circumference
+    // wide, aligned to the unwrap period containing the curve (after the
+    // angle unwrap, `u` may live in any 2πR-period).
+    let center = (u_min + u_max) / 2.0;
+    let frame_start = (center / circumference).floor() * circumference;
+    let frame = (frame_start, v_min, circumference, (v_max - v_min).max(0.1));
 
-    let bbox = (u_min, v_min, u_min + frame_w, v_max);
+    let bbox = (
+        u_min.min(frame_start),
+        v_min,
+        u_max.max(frame_start + circumference),
+        v_max,
+    );
 
     let annotations: Vec<Annotation> = doc
         .annotations
@@ -325,6 +375,7 @@ fn layout_sheet(
         closed,
         frame,
         axis_u: 0.0,
+        circumference,
         bbox,
         cut_bbox,
         annotations,

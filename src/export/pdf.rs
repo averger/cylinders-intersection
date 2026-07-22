@@ -253,22 +253,42 @@ fn draw_model(cs: &mut Cs, doc: &ExportDocument, sheet: &Sheet) {
     }
 
     if doc.layers.axis {
-        // Quarter generators: 0°, 90°, 180°, 270° around the tube.
+        // True tube generatrices (multiples of 90°, u = 0 ⇔ θ = 0): the
+        // wrap-alignment marks — match them with lines traced on the tube.
         cs.save();
         cs.line_width(0.12);
         cs.stroke_gray(0.35);
         cs.dash(3.0, 1.2);
-        let (fx, fy, fw, fh) = sheet.frame;
-        for q in 0..=4 {
-            let u = fx + fw * (q as f64) / 4.0;
+        let (_fx, fy, _fw, fh) = sheet.frame;
+        let gens = sheet.generatrices();
+        for &(u, _) in &gens {
             cs.segment(u, fy, u, fy + fh);
         }
+
+        // Axis-plane datum v = 0: longitudinal positioning reference.
+        let (_, v0, _, v1) = sheet.bbox;
+        if v0 < 0.0 && v1 > 0.0 {
+            cs.dash(5.0, 1.6);
+            cs.segment(sheet.bbox.0, 0.0, sheet.bbox.2, 0.0);
+        }
+
+        // Alignment ticks where each generatrix crosses the cut line.
         cs.solid();
+        cs.line_width(0.3);
+        cs.stroke_gray(0.0);
+        for &(u, _) in &gens {
+            for v in sheet.curve_crossings(u) {
+                cs.segment(u - 2.5, v, u + 2.5, v);
+            }
+        }
+
         if doc.layers.labels {
-            for (q, label) in ["0°", "90°", "180°", "270°", "360°"].iter().enumerate() {
-                let u = fx + fw * (q as f64) / 4.0;
-                cs.fill_gray(0.35);
-                cs.text(1, 2.4, u + 0.8, fy + 0.9, label);
+            cs.fill_gray(0.35);
+            for &(u, deg) in &gens {
+                cs.text(1, 2.4, u + 0.8, fy + 0.9, &format!("{deg}°"));
+            }
+            if v0 < 0.0 && v1 > 0.0 {
+                cs.text(1, 2.0, sheet.bbox.0 + 1.0, 0.7, "réf. plan des axes");
             }
         }
         cs.restore();

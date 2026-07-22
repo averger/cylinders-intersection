@@ -158,9 +158,19 @@ fn write_sheet(w: &mut DxfWriter, sheet: &Sheet, offset_x: f64) {
 
     let (fx, fy, fw, fh) = sheet.frame;
     w.rect("FRAME", fx + dx, fy, fw, fh);
-    for q in 0..=4 {
-        let x = fx + fw * (q as f64) / 4.0 + dx;
-        w.line("AXIS", x, fy, x, fy + fh);
+
+    // True generatrices with angle labels, alignment ticks on the cut line,
+    // and the axis-plane datum — the wrap-alignment marks.
+    for (g, deg) in sheet.generatrices() {
+        w.line("AXIS", g + dx, fy, g + dx, fy + fh);
+        w.text("AXIS", g + dx + 0.8, fy + 0.9, 2.4, &format!("{deg}d"));
+        for v in sheet.curve_crossings(g) {
+            w.line("AXIS", g + dx - 2.5, v, g + dx + 2.5, v);
+        }
+    }
+    if sheet.bbox.1 < 0.0 && sheet.bbox.3 > 0.0 {
+        w.line("AXIS", sheet.bbox.0 + dx, 0.0, sheet.bbox.2 + dx, 0.0);
+        w.text("AXIS", sheet.bbox.0 + dx + 1.0, 0.7, 2.0, "ref plan des axes");
     }
 
     let cut: Vec<(f64, f64)> = sheet.cut.iter().map(|&(u, v)| (u + dx, v)).collect();

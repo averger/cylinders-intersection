@@ -20,6 +20,8 @@
     { label: "Ajusté", value: "fit" as ScaleMode },
   ];
 
+  let showOptions = $state(false);
+
   const layerDefs: [keyof typeof editor.layers & string, string][] = [
     ["grid", "Grille 10 mm"],
     ["frame", "Emprise du tube"],
@@ -29,7 +31,33 @@
   ];
 </script>
 
-<div class="flex flex-col gap-6">
+<div class="flex flex-col gap-5">
+  <button
+    class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border border-mist bg-carbon/60 hover:bg-carbon transition-colors"
+    onclick={() => (showOptions = !showOptions)}
+    aria-expanded={showOptions}
+  >
+    <span class="text-[11px] uppercase tracking-[0.18em] text-silver">Options</span>
+    <span class="flex items-center gap-2 text-[10px] text-ash num">
+      {editor.page.format.toUpperCase()} · {editor.page.orientation === "landscape"
+        ? "paysage"
+        : "portrait"} · {editor.scale === "one_to_one" ? "1:1" : "ajusté"}
+      <svg
+        viewBox="0 0 24 24"
+        class="w-3.5 h-3.5 fill-none stroke-current transition-transform {showOptions
+          ? 'rotate-180'
+          : ''}"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+    </span>
+  </button>
+
+  {#if showOptions}
+  <div class="flex flex-col gap-6 pl-1">
   <section class="space-y-3">
     <span class="text-[10px] uppercase tracking-[0.18em] text-ash">Mise en page</span>
     <div class="flex flex-wrap gap-2">
@@ -112,6 +140,9 @@
         })}
     />
   </section>
+
+  </div>
+  {/if}
 
   <section class="space-y-2">
     <span class="text-[10px] uppercase tracking-[0.18em] text-ash">Annotations</span>
