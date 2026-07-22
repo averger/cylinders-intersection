@@ -299,7 +299,7 @@
       // Soft translucency; depthWrite stays on so the ground grid and the
       // far walls remain properly occluded.
       transparent: true,
-      opacity: 0.86,
+      opacity: 0.72,
     });
   }
 
@@ -518,6 +518,25 @@
       rg.position.y = bottomZ;
       solidsGroup.add(rg);
 
+      // The cutting plane itself, visible as a large translucent disc.
+      {
+        const discGeom = new THREE.CircleGeometry(r1 * 2.4, 96);
+        const discMat = new THREE.MeshStandardMaterial({
+          color: pal.branch,
+          transparent: true,
+          opacity: 0.22,
+          side: THREE.DoubleSide,
+          metalness: 0.05,
+          roughness: 0.7,
+          depthWrite: false,
+        });
+        const disc = new THREE.Mesh(discGeom, discMat);
+        // three-space plane normal: (0, cosφ, −sinφ).
+        disc.rotation.x = -Math.PI / 2 - phiAngle;
+        disc.position.y = store.params.z0;
+        solidsGroup.add(disc);
+      }
+
       const cap = buildPlaneCap(payload);
       if (cap) {
         const capMat = new THREE.MeshStandardMaterial({
@@ -525,6 +544,8 @@
           metalness: 0.25,
           roughness: 0.4,
           side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.85,
         });
         solidsGroup.add(new THREE.Mesh(cap, capMat));
         anchors.push({

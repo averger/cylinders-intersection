@@ -21,7 +21,13 @@
   // The branch development is always an open curve (u = 0 meets u = 2πR on
   // the rolled tube); the gueule de loup closes when the backend says so.
   let closed = $derived(kind === "branch" ? false : (store.result?.dev_main_closed ?? false));
-  let box = $derived(editor.patternBox(kind));
+  // Viewport framed on the cut extents (+ margin) — the gueule de loup
+  // sheet no longer spans the whole unwrapped circumference.
+  let box = $derived.by(() => {
+    const cb = editor.cutBox(kind);
+    if (!cb) return null;
+    return { uMin: cb.uMin, vMin: cb.vMin, w: Math.max(cb.uMax - cb.uMin, 1), h: Math.max(cb.vMax - cb.vMin, 0.1) };
+  });
 
   let accent = $derived(kind === "branch" ? "var(--ember)" : "var(--cyan)");
   let title = $derived(
@@ -35,6 +41,34 @@
     const r = store.result;
     if (!r) return 0;
     return kind === "branch" ? (r.r2 ?? r.r1) * 2 : r.r1 * 2;
+  });
+  let circumference = $derived.by(() => {
+    const r = store.result;
+    if (!r) return 0;
+    return kind === "branch" ? (r.circumference_branch ?? r.circumference_main) : r.circumference_main;
+  });
+
+  // Unwrapped-period start containing the curve (u may live in any
+  // 2πR-period after the angle unwrap).
+  let frameStart = $derived.by(() => {
+    if (!box || circumference <= 0) return 0;
+    const center = box.uMin + box.w / 2;
+    return Math.floor(center / circumference) * circumference;
+  });
+
+  // True tube generatrices (multiples of 90°, u = 0 ⇔ θ = 0) falling
+  // inside the cropped viewport.
+  let gens = $derived.by(() => {
+    if (!box || circumference <= 0) return [];
+    const step = circumference / 4;
+    const out: { u: number; deg: number }[] = [];
+    const k0 = Math.floor((box.uMin - 1e-9) / step);
+    for (let k = k0; k * step <= box.uMin + box.w + 1e-9; k++) {
+      const u = k * step;
+      if (u < box.uMin - 1e-9) continue;
+      out.push({ u, deg: ((k * 90) % 360 + 360) % 360 });
+    }
+    return out;
   });
 
   let viewW = $derived(box ? box.w + MARGIN * 2 : 100);
@@ -134,18 +168,17 @@
     }
     if (editor.layers.frame) {
       parts.push(
-        `<rect x="${X(box.uMin).toFixed(2)}" y="${Y(box.vMin + box.h).toFixed(2)}" width="${box.w.toFixed(2)}" height="${box.h.toFixed(2)}" fill="none" stroke="#777" stroke-width="0.15" stroke-dasharray="1.6 1.4"/>`,
+        `<rect x="${X(frameStart).toFixed(2)}" y="${Y(box.vMin + box.h).toFixed(2)}" width="${circumference.toFixed(2)}" height="${box.h.toFixed(2)}" fill="none" stroke="#777" stroke-width="0.15" stroke-dasharray="1.6 1.4"/>`,
       );
     }
     if (editor.layers.axis) {
-      for (let q = 0; q <= 4; q++) {
-        const u = box.uMin + (box.w * q) / 4;
+      for (const g of gens) {
         parts.push(
-          `<line x1="${X(u).toFixed(2)}" y1="${Y(box.vMin).toFixed(2)}" x2="${X(u).toFixed(2)}" y2="${Y(box.vMin + box.h).toFixed(2)}" stroke="#555" stroke-width="0.12" stroke-dasharray="3 1.2"/>`,
+          `<line x1="${X(g.u).toFixed(2)}" y1="${Y(box.vMin).toFixed(2)}" x2="${X(g.u).toFixed(2)}" y2="${Y(box.vMin + box.h).toFixed(2)}" stroke="#555" stroke-width="0.12" stroke-dasharray="3 1.2"/>`,
         );
         if (editor.layers.labels)
           parts.push(
-            `<text x="${(X(u) + 0.8).toFixed(2)}" y="${(Y(box.vMin) - 0.9).toFixed(2)}" font-size="2.4" fill="#555" font-family="Helvetica, Arial, sans-serif">${q * 90}°</text>`,
+            `<text x="${(X(g.u) + 0.8).toFixed(2)}" y="${(Y(box.vMin) - 0.9).toFixed(2)}" font-size="2.4" fill="#555" font-family="Helvetica, Arial, sans-serif">${g.deg}°</text>`,
           );
       }
     }
@@ -220,9 +253,9 @@
 
       {#if editor.layers.frame}
         <rect
-          x={X(box.uMin)}
+          x={X(frameStart)}
           y={Y(box.vMin + box.h)}
-          width={box.w}
+          width={circumference}
           height={box.h}
           style="fill: var(--frame-fill); stroke: var(--frame-line)"
           stroke-width={viewW / 900}
@@ -231,11 +264,11 @@
       {/if}
 
       {#if editor.layers.axis}
-        {#each [0, 1, 2, 3, 4] as q (q)}
+        {#each gens as g (g.u)}
           <line
-            x1={X(box.uMin + (box.w * q) / 4)}
+            x1={X(g.u)}
             y1={Y(box.vMin)}
-            x2={X(box.uMin + (box.w * q) / 4)}
+            x2={X(g.u)}
             y2={Y(box.vMin + box.h)}
             style="stroke: color-mix(in srgb, var(--cyan) 30%, transparent)"
             stroke-width={viewW / 1400}
@@ -243,13 +276,13 @@
           />
           {#if editor.layers.labels}
             <text
-              x={X(box.uMin + (box.w * q) / 4) + viewW / 300}
+              x={X(g.u) + viewW / 300}
               y={Y(box.vMin) - viewH / 90}
               font-size={Math.max(2, viewW / 90)}
               style="fill: color-mix(in srgb, var(--cyan) 70%, transparent)"
               font-family="JetBrains Mono, monospace"
             >
-              {q * 90}°
+              {g.deg}°
             </text>
           {/if}
         {/each}

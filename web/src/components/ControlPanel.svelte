@@ -8,8 +8,8 @@
   let p = $derived(store.params);
 
   const modeOptions = [
-    { label: "Cyl. ↺ Cyl.", value: "cyl_cyl" as Mode },
-    { label: "Cyl. ↺ Plan", value: "cyl_plane" as Mode },
+    { label: "Cyl / Cyl", value: "cyl_cyl" as Mode },
+    { label: "Cyl / Plan", value: "cyl_plane" as Mode },
   ];
 
   const branchOptions = [

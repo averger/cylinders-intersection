@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Développés exacts d'intersections de cylindres — gueule de loup et coupe en sifflet à l'échelle 1:1</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css" />
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+<style>
+  :root {
+    --ink: #191919;
+    --muted: #555;
+    --accent: #b34a10;
+    --rule: #d8d5cf;
+  }
+  * { box-sizing: border-box; }
+  html { font-size: 10.4pt; }
+  body {
+    font-family: "Charter", "Georgia", "Times New Roman", serif;
+    color: var(--ink);
+    line-height: 1.52;
+    max-width: 168mm;
+    margin: 0 auto;
+    padding: 4mm 0 10mm;
+    text-align: justify;
+    hyphens: auto;
+  }
+  header.title { text-align: center; margin-bottom: 8mm; }
+  h1 {
+    font-size: 16.5pt;
+    line-height: 1.28;
+    font-weight: 700;
+    margin: 0 0 3mm;
+  }
+  .authors { font-size: 11pt; margin: 1mm 0 0.5mm; }
+  .affil { font-size: 9pt; color: var(--muted); }
+  .abstract {
+    margin: 6mm 8mm 0;
+    font-size: 9.4pt;
+    text-align: justify;
+  }
+  .abstract b { letter-spacing: 0.04em; }
+  h2 {
+    font-size: 11.5pt;
+    font-weight: 700;
+    margin: 6.5mm 0 2mm;
+    padding-bottom: 0.8mm;
+    border-bottom: 0.4pt solid var(--rule);
+  }
+  h3 { font-size: 10.4pt; font-weight: 700; margin: 4mm 0 1.5mm; }
+  p { margin: 0 0 2.2mm; }
+  .eq { margin: 2.5mm 0; }
+  .eqn { display: flex; align-items: center; margin: 2.5mm 0; }
+  .eqn .m { flex: 1; text-align: center; }
+  .eqn .no { color: var(--muted); font-size: 9.5pt; padding-left: 4mm; }
+  .prop {
+    border-left: 2.5px solid var(--accent);
+    padding: 1.5mm 0 1.5mm 4mm;
+    margin: 3mm 0;
+  }
+  .prop .tag { font-variant: small-caps; color: var(--accent); font-weight: 700; }
+  ul { margin: 0 0 2.2mm; padding-left: 6mm; }
+  li { margin-bottom: 1mm; }
+  table {
+    border-collapse: collapse;
+    margin: 3mm auto;
+    font-size: 9pt;
+  }
+  th, td { border-top: 0.4pt solid var(--rule); border-bottom: 0.4pt solid var(--rule); padding: 1.2mm 3.5mm; text-align: center; }
+  th { font-weight: 700; border-top: 1pt solid var(--ink); }
+  tbody tr:last-child td { border-bottom: 1pt solid var(--ink); }
+  .caption { font-size: 8.8pt; color: var(--muted); text-align: center; margin-top: 1mm; }
+  .refs { font-size: 9pt; }
+  .refs li { margin-bottom: 1.2mm; }
+  footer { margin-top: 8mm; padding-top: 2mm; border-top: 0.4pt solid var(--rule); font-size: 8.6pt; color: var(--muted); }
+  .katex { font-size: 1.02em; }
+  @media print {
+    body { padding: 0; }
+  }
+</style>
+</head>
+<body>
+
+<header class="title">
+  <h1>Développés exacts d'intersections de cylindres&nbsp;:<br/>
+  gueule de loup et coupe en sifflet à l'échelle&nbsp;1:1</h1>
+  <div class="authors">A.&nbsp;Verger</div>
+  <div class="affil">Juillet 2026 — moteur de calcul <i>Cylix</i> (Rust), implémentation et scripts de vérification disponibles avec le code source</div>
+</header>
+
+<div class="abstract">
+<p><b>RÉSUMÉ.</b> Nous établissons les formules fermées décrivant l'intersection de deux cylindres
+de révolution à axes concourants, ainsi que celle d'un cylindre et d'un plan incliné, et leurs
+<i>développés</i> — les mises à plat servant de gabarits de découpe en chaudronnerie (« gueule de
+loup », coupe « en sifflet »). L'intersection se réduit, génératrice par génératrice, à une équation
+du second degré dont le discriminant admet la forme remarquable
+\(\Delta = 4\sin^2\varphi\,(R_1^2 - R_2^2\cos^2\theta)\)&nbsp;; le développement du cylindre étant une
+isométrie, les gabarits obtenus sont exacts, sans approximation autre que l'échantillonnage final en
+polyligne, dont l'erreur est bornée explicitement. Nous précisons la topologie des courbes selon le
+rapport des rayons, le comportement aux points de tangence — tangente verticale pour un zéro simple
+du discriminant (\(R_2 > R_1\)), point anguleux de pentes finies \(-\tan(\varphi/2)\) et
+\(+\cot(\varphi/2)\) pour le zéro double (\(R_1 = R_2\)) — et retrouvons comme cas particuliers la
+formule traditionnelle de traçage à 90° et la sinusoïde de la coupe plane. Chaque énoncé est vérifié
+mécaniquement (25 contrôles symboliques et numériques) et l'implémentation Rust coïncide avec une
+implémentation NumPy indépendante à moins de \(2\times10^{-13}\) mm sur l'ensemble des régimes.</p>
+</div>
+
+<h2>1. Introduction</h2>
+<p>Le raccordement de deux tubes cylindriques — piquage droit ou incliné, culotte, coupe d'onglet —
+est un problème quotidien de chaudronnerie et de tuyauterie. La pratique traditionnelle repose sur
+des constructions de géométrie descriptive ou des abaques de traçage&nbsp;; les formules exactes,
+pourtant élémentaires, restent dispersées dans la littérature technique et rarement énoncées avec
+leurs domaines de validité et leurs cas dégénérés. Cet article rassemble une dérivation complète et
+<i>vérifiée mécaniquement</i> des deux développés utiles à la fabrication&nbsp;: le gabarit du tube
+sécant (à enrouler sur le tube avant découpe) et la <i>gueule de loup</i>, contour de la lumière à
+percer dans le tube principal. La coupe d'un tube par un plan incliné (« sifflet ») est traitée comme
+cas compagnon. L'objectif est double&nbsp;: fournir une référence auto-contenue prête à implémenter,
+et documenter les subtilités — choix de branche, topologie selon le rapport des rayons, points de
+tangence — qui font échouer les implémentations naïves.</p>
+
+<h2>2. Modèle et paramétrisation</h2>
+<p>Dans un repère orthonormé \((x,y,z)\), le cylindre principal \(\mathcal{C}_1\), de rayon
+\(R_1\), a pour axe \(Oz\)&nbsp;: \(x^2+y^2=R_1^2\), de coordonnées cylindriques naturelles
+\((\alpha, z)\). Le cylindre sécant \(\mathcal{C}_2\), de rayon \(R_2\), s'obtient en faisant
+tourner d'un angle \(\varphi\) autour de \(Ox\) un cylindre initialement coaxial à \(Oz\),
+paramétré avant rotation par \((R_2\cos\theta,\,R_2\sin\theta,\,t)\). Après rotation
+\(R_x(\varphi)\)&nbsp;:</p>
+<div class="eqn"><div class="m">
+$$x = R_2\cos\theta,\qquad
+y = R_2\sin\theta\cos\varphi - t\sin\varphi,\qquad
+z = R_2\sin\theta\sin\varphi + t\cos\varphi$$
+</div><div class="no">(1)</div></div>
+<p>L'axe de \(\mathcal{C}_2\) est dirigé par \((0,-\sin\varphi,\cos\varphi)\)&nbsp;; les deux axes
+sont concourants à l'origine (piquage centré). Nous prenons \(\varphi\in(0,\pi)\), donc
+\(\sin\varphi>0\) — pour \(\sin\varphi<0\) les deux racines de la section&nbsp;3 s'échangent.
+Observation clef&nbsp;: la rotation ayant lieu autour de \(Ox\), l'abscisse \(x=R_2\cos\theta\) ne
+dépend pas de \(t\)&nbsp;; la génératrice d'angle \(\theta\) est une droite entièrement contenue
+dans le plan \(x = R_2\cos\theta\).</p>
+
+<h2>3. La courbe d'intersection est un second degré</h2>
+<p>Un point de \(\mathcal{C}_2\) appartient à \(\mathcal{C}_1\) si et seulement si
+\(x^2+y^2=R_1^2\). En substituant (1), on obtient à \(\theta\) fixé le trinôme</p>
+<div class="eqn"><div class="m">
+$$\underbrace{\sin^2\varphi}_{a}\,t^2
+\;\underbrace{-\,2R_2\sin\theta\cos\varphi\sin\varphi}_{b}\,t
+\;+\;\underbrace{R_2^2(\cos^2\theta+\sin^2\theta\cos^2\varphi)-R_1^2}_{c}\;=\;0,$$
+</div><div class="no">(2)</div></div>
+<p>dont le discriminant se simplifie remarquablement&nbsp;:</p>
+<div class="eqn"><div class="m">
+$$\Delta(\theta) \;=\; b^2-4ac \;=\; 4\sin^2\varphi\,\bigl(R_1^2 - R_2^2\cos^2\theta\bigr).$$
+</div><div class="no">(3)</div></div>
+<p>Les solutions sont donc</p>
+<div class="eqn"><div class="m">
+$$t_\pm(\theta) \;=\;
+\frac{R_2\sin\theta\cos\varphi \;\pm\; \sqrt{R_1^2-R_2^2\cos^2\theta}}{\sin\varphi}.$$
+</div><div class="no">(4)</div></div>
+
+<div class="prop"><span class="tag">Interprétation.</span> La condition d'existence
+\(\Delta\ge 0 \iff R_2\lvert\cos\theta\rvert \le R_1\) exprime que la génératrice — droite du plan
+\(x=R_2\cos\theta\) — rencontre le cylindre principal, qui n'occupe que la tranche
+\(\lvert x\rvert\le R_1\). Les racines \(t_-\) et \(t_+\) sont les points d'entrée et de sortie de
+la paroi. Un tube sécant arrivant du côté \(t\to+\infty\) rencontre d'abord la racine \(t_+\)&nbsp;:
+c'est elle qui définit la coupe en selle du piquage usuel (branche <i>outer</i> du moteur).</div>
+
+<h3>3.1 Topologie et choix de branche</h3>
+<ul>
+<li><b>\(R_2 < R_1\)</b> — pénétration classique&nbsp;: \(\Delta>0\) partout, l'intersection est
+formée de deux courbes fermées disjointes et analytiques (entrée/sortie), chacune paramétrée par
+\(\theta\in[0,2\pi)\), et chaque lieu \(\{t_\pm\}\) coïncide avec une composante connexe.</li>
+<li><b>\(R_1 = R_2\)</b> — cas de Steinmetz&nbsp;: (2) se factorise, l'intersection est la réunion de
+deux ellipses planes (plans \(z=\pm y\) à \(\varphi=\pi/2\)) qui se croisent aux deux points de
+tangence \(\theta\in\{0,\pi\}\).</li>
+<li><b>\(R_2 > R_1\)</b> — seuls les \(\theta\) tels que \(\lvert\cos\theta\rvert\le R_1/R_2\)
+contribuent&nbsp;; les deux composantes connexes encerclent le cylindre principal et mélangent les
+deux racines&nbsp;: les lieux \(\{t_+\}\) et \(\{t_-\}\) restent les courbes de sortie et d'entrée —
+pertinentes pour le traçage — mais ne sont plus des composantes connexes.</li>
+</ul>
+
+<h2>4. Développés&nbsp;: l'isométrie qui autorise le gabarit</h2>
+<p>Le cylindre est développable&nbsp;: sa première forme fondamentale dans la carte \((\theta,t)\)
+vaut \(\mathrm{d}s^2 = R^2\mathrm{d}\theta^2+\mathrm{d}t^2\), de sorte que l'application de
+déroulage</p>
+<div class="eqn"><div class="m">
+$$(\theta, t)\;\longmapsto\;(u,v) = (R\,\theta,\; t)$$
+</div><div class="no">(5)</div></div>
+<p>est une isométrie&nbsp;: longueurs et angles sont conservés. Un gabarit tracé dans le plan
+\((u,v)\) puis enroulé reproduit exactement la courbe spatiale — fondement du traçage à
+l'échelle&nbsp;1:1.</p>
+
+<h3>4.1 Gabarit du tube sécant</h3>
+<p>En appliquant (5) à \(\mathcal{C}_2\) avec (4)&nbsp;:
+\(u_2 = R_2\theta\), \(v_2 = t_\pm(\theta)\). La largeur totale est le périmètre \(2\pi R_2\)&nbsp;;
+la courbe est <i>ouverte</i> sur la période complète (les bords \(u=0\) et \(u=2\pi R_2\)
+coïncident sur le tube roulé — aucune corde de fermeture ne doit être tracée). On a les symétries
+\(t_+(\theta)+t_-(\theta) = 2R_2\sin\theta\cos\varphi/\sin\varphi\) et
+\(t_+(-\theta) = -t_-(\theta)\)&nbsp;: le gabarit <i>inner</i> se déduit du gabarit <i>outer</i>
+par le retournement \((\theta,t)\mapsto(-\theta,-t)\).</p>
+
+<h3>4.2 Gueule de loup</h3>
+<p>La même courbe, vue du cylindre principal, définit la lumière à découper. Avec
+\(\alpha=\operatorname{atan2}(y,x)\) et \(v_1=z\), \(u_1=R_1\alpha\), et puisque \(x\) est partagé
+par les deux cylindres, on a la relation de transfert exacte</p>
+<div class="eqn"><div class="m">
+$$\cos\alpha \;=\; \frac{R_2}{R_1}\,\cos\theta.$$
+</div><div class="no">(6)</div></div>
+<p>La suite \(\alpha(\theta)\) est continue après suppression des sauts de \(2\pi\)
+(<i>unwrap</i>)&nbsp;; il est essentiel de conserver <b>l'ordre de parcours en \(\theta\)</b> — un
+tri par \(u_1\) entrelacerait les deux lèvres du contour en zigzag. La topologie se lit sur la
+proximité géométrique des extrémités&nbsp;: contour fermé (pénétration complète, \(R_2\le R_1\)) ou
+courbe ouverte sur \(2\pi R_1\) (\(R_2>R_1\)). À \(\varphi=\pi/2\), la combinaison de (4) et (6)
+redonne la formule traditionnelle de traçage</p>
+<div class="eqn"><div class="m">
+$$v_1(\alpha)\Big|_{\varphi=\pi/2} \;=\; \pm\sqrt{R_2^2 - R_1^2\cos^2\alpha},
+\qquad \lvert\cos\alpha\rvert \le R_2/R_1.$$
+</div><div class="no">(7)</div></div>
+
+<h2>5. Coupe en sifflet</h2>
+<p>Un tube unique coupé par le plan \(z = z_0 - y\tan\varphi\) (normale
+\((0,\sin\varphi,\cos\varphi)\), \(\varphi\in(-\pi/2,\pi/2)\)) donne la courbe
+\(\gamma(\theta) = (R_1\cos\theta,\; R_1\sin\theta,\; z_0 - R_1\tan\varphi\sin\theta)\)&nbsp;: une
+ellipse de demi-axes \(R_1\) et \(R_1/\cos\varphi\). Son développé est une sinusoïde exacte,</p>
+<div class="eqn"><div class="m">
+$$v(u) \;=\; z_0 \;-\; R_1\tan\varphi\,\sin\!\frac{u}{R_1},$$
+</div><div class="no">(8)</div></div>
+<p>de période \(2\pi R_1\) et d'amplitude crête-à-crête \(2R_1\lvert\tan\varphi\rvert\) — droite à
+\(\varphi=0\), divergence pour \(\varphi\to\pm\pi/2\) (plan parallèle à l'axe, exclu).</p>
+
+<h2>6. Points de tangence</h2>
+<p>Aux zéros de \(\Delta\) (\(R_2\lvert\cos\theta\rvert=R_1\)), les deux branches coïncident&nbsp;:
+la génératrice est tangente au cylindre principal. Le comportement local dépend de la
+<b>multiplicité</b> du zéro&nbsp;:</p>
+<ul>
+<li><b>\(R_2>R_1\), zéro simple</b> en \(\cos\theta^\ast=\pm R_1/R_2\)&nbsp;: le radicande s'annule
+linéairement, \(t_\pm'\) diverge — le développé présente une véritable tangente verticale, et la
+gueule de loup atteint son extrémité en \(u_1\) (\(\lvert\cos\alpha\rvert=1\) dans (6)).</li>
+<li><b>\(R_1=R_2=R\), zéro double</b> en \(\theta^\ast\in\{0,\pi\}\)&nbsp;: le radicande vaut
+\(R^2\sin^2\theta\), sa racine \(R\lvert\sin\theta\rvert\) est lipschitzienne et les pentes
+unilatérales du développé restent finies&nbsp;:
+<div class="eq">$$\left.\frac{\mathrm{d}v_2}{\mathrm{d}u_2}\right|_{0^-} = -\tan\frac{\varphi}{2},
+\qquad
+\left.\frac{\mathrm{d}v_2}{\mathrm{d}u_2}\right|_{0^+} = +\cot\frac{\varphi}{2}\,:$$</div>
+le gabarit présente un point anguleux — à \(\varphi=\pi/2\) on retrouve les pentes \(\mp 1\) des
+arches en \(\lvert\sin\rvert\) du solide de Steinmetz.</li>
+</ul>
+<p>Pour \(R_2<R_1\), \(\Delta>0\) partout&nbsp;: courbes analytiques lisses, aucun traitement
+spécial n'est requis puisque (4) reste continue.</p>
+
+<h2>7. Discrétisation et bornes d'erreur</h2>
+<p>Les formules (4)–(8) sont exactes&nbsp;; la seule approximation est le remplacement des courbes
+par la polyligne de leurs échantillons (\(\theta\) uniforme sur \([0,2\pi)\), échantillons à
+discriminant négatif écartés). Pour une corde de longueur \(\ell\) sous-tendant un arc de courbure
+maximale \(\kappa\), la flèche est bornée par \(e \le \kappa\ell^2/8\). Au réglage par défaut
+(\(N=1440\), pas \(0{,}25^\circ\)) et pour des tubes de diamètre \(\le 500\)&nbsp;mm, l'écart reste
+très inférieur à \(0{,}01\)&nbsp;mm partout où la courbure est bornée — sans objet devant un trait
+de coupe. Près des tangences du cas \(R_2>R_1\), la courbure diverge mais l'erreur reste contrôlée
+par la densité d'échantillonnage et la continuité de (4).</p>
+
+<h2>8. Vérification mécanique et validation croisée</h2>
+<p>Chaque énoncé de cet article est vérifié par un script symbolique et numérique
+(SymPy/NumPy, 25 contrôles)&nbsp;: coefficients (2), forme fermée (3), racines (4) sur 200 tirages
+aléatoires, condition d'existence, première forme fondamentale, symétries, transfert (6), formule
+(7), appartenance au plan et demi-axes de l'ellipse, sinusoïde (8) et son amplitude, factorisation
+de Steinmetz, divergence de pente au zéro simple et pentes \(-\tan(\varphi/2)\) /
+\(+\cot(\varphi/2)\) au zéro double. Par ailleurs, l'implémentation Rust du moteur et une
+implémentation NumPy indépendante coïncident sur les trois sorties (courbe 3D, gabarit du tube,
+gueule de loup)&nbsp;:</p>
+<table>
+<thead><tr><th>\(R_1\) (mm)</th><th>\(R_2\) (mm)</th><th>\(\varphi\)</th><th>branche</th><th>écart max (mm)</th></tr></thead>
+<tbody>
+<tr><td>50</td><td>35</td><td>45°</td><td>outer</td><td>\(6{,}4\times10^{-14}\)</td></tr>
+<tr><td>50</td><td>35</td><td>45°</td><td>inner</td><td>\(8{,}0\times10^{-14}\)</td></tr>
+<tr><td>80</td><td>80</td><td>90°</td><td>outer</td><td>\(1{,}3\times10^{-13}\)</td></tr>
+<tr><td>60</td><td>25</td><td>20°</td><td>outer</td><td>\(8{,}7\times10^{-14}\)</td></tr>
+<tr><td>30</td><td>45</td><td>60°</td><td>outer</td><td>\(1{,}3\times10^{-13}\)</td></tr>
+<tr><td>100</td><td>99,5</td><td>75°</td><td>inner</td><td>\(1{,}7\times10^{-13}\)</td></tr>
+</tbody>
+</table>
+<p class="caption">Validation croisée Rust ↔ NumPy (720 échantillons par cas)&nbsp;: écart maximal
+sur l'ensemble des points, tous régimes confondus — de l'ordre de l'epsilon machine.</p>
+
+<h2>9. Implémentation</h2>
+<p>Les formules ci-dessus sont implémentées dans <i>Cylix</i>, un outil libre dont le moteur Rust
+expose le calcul par API et produit les gabarits à l'échelle&nbsp;1:1&nbsp;: PDF vectoriel
+millimétrique tuilé sur pages ISO avec repères d'assemblage et règle de contrôle de 100&nbsp;mm
+(l'impression « taille réelle » se vérifie au réglet), DXF R12 pour les chaînes CAO/CNC, SVG.
+L'interface (Svelte/WebGL) présente la pièce en 3D — chaque cylindre arrêté à l'intersection — et
+les deux mises à plat annotables. Le tuilage ne couvre que l'emprise de la courbe et les pages sans
+trait de coupe sont supprimées.</p>
+
+<h2>Références</h2>
+<ol class="refs">
+<li>Traités classiques de géométrie descriptive et de traçage en chaudronnerie (intersections de
+surfaces de révolution et développements).</li>
+<li>M.&nbsp;P. do Carmo, <i>Differential Geometry of Curves and Surfaces</i>, Prentice-Hall, 1976 —
+surfaces développables, première forme fondamentale, isométries.</li>
+<li>Solide de Steinmetz — intersection de deux cylindres égaux perpendiculaires.</li>
+<li>Code source, scripts de vérification (<code>verify_theory.py</code>,
+<code>verify_engine.py</code>) et outil <i>Cylix</i>&nbsp;: dépôt
+<code>averger/cylinders-intersection</code>.</li>
+</ol>
+
+<footer>
+Document généré depuis <code>docs/paper/cylix-paper.html</code> (KaTeX)&nbsp;— la version de
+référence de la dérivation, avec démonstrations détaillées, est <code>docs/THEORY.md</code>&nbsp;;
+chaque équation y est vérifiée mécaniquement par <code>docs/verification/</code>.
+</footer>
+
+</body>
+</html>
