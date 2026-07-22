@@ -4,6 +4,22 @@
   import { store, type View } from "../lib/store.svelte";
   import { editor } from "../lib/editor.svelte";
 
+  let exportMenu = $state(false);
+
+  function pick(kind: "pdf" | "dxf") {
+    exportMenu = false;
+    if (kind === "pdf") editor.exportPdf();
+    else editor.exportDxf();
+  }
+
+  function clickOutside(node: HTMLElement) {
+    const onDown = (e: PointerEvent) => {
+      if (!node.contains(e.target as Node)) exportMenu = false;
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return { destroy: () => document.removeEventListener("pointerdown", onDown, true) };
+  }
+
   const viewOptions = [
     { label: "3D", value: "3d" as View },
     { label: "2D", value: "2d" as View },
@@ -63,26 +79,69 @@
           </svg>
         {/if}
       </button>
-      <button
-        class="btn-primary !py-2 text-sm"
-        disabled={editor.busy !== null || !store.result}
-        onclick={() => editor.exportPdf()}
-        aria-label="Exporter le PDF 1:1"
-        title="Exporter le PDF vectoriel à l'échelle 1:1"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          class="w-4 h-4 fill-none stroke-current"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
+      <div class="relative" use:clickOutside>
+        <button
+          class="btn-primary !py-2 text-sm"
+          disabled={editor.busy !== null || !store.result}
+          onclick={() => (exportMenu = !exportMenu)}
+          aria-haspopup="menu"
+          aria-expanded={exportMenu}
+          aria-label="Exporter"
+          title="Exporter — le cliché exact des vues 2D, en PDF 1:1 ou DXF"
         >
-          <path d="M12 3v12" />
-          <path d="m7 10 5 5 5-5" />
-          <path d="M4 19h16" />
-        </svg>
-        {editor.busy === "pdf" ? "export…" : "Exporter"}
-      </button>
+          <svg
+            viewBox="0 0 24 24"
+            class="w-4 h-4 fill-none stroke-current"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M12 3v12" />
+            <path d="m7 10 5 5 5-5" />
+            <path d="M4 19h16" />
+          </svg>
+          {editor.busy !== null ? "export…" : "Exporter"}
+          <svg
+            viewBox="0 0 24 24"
+            class="w-3.5 h-3.5 fill-none stroke-current transition-transform {exportMenu
+              ? 'rotate-180'
+              : ''}"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+
+        {#if exportMenu}
+          <div
+            class="absolute right-0 top-[calc(100%+8px)] w-64 glass-strong card-hairline rounded-2xl p-1.5 z-50"
+            role="menu"
+          >
+            <button
+              class="w-full text-left px-3.5 py-2.5 rounded-xl hover:bg-carbon transition-colors"
+              role="menuitem"
+              onclick={() => pick("pdf")}
+            >
+              <div class="text-[13.5px] font-medium text-pearl">PDF · échelle 1:1</div>
+              <div class="text-[11px] text-ash leading-snug mt-0.5">
+                Tuilé avec repères de collage — imprimer, enrouler, couper.
+              </div>
+            </button>
+            <button
+              class="w-full text-left px-3.5 py-2.5 rounded-xl hover:bg-carbon transition-colors"
+              role="menuitem"
+              onclick={() => pick("dxf")}
+            >
+              <div class="text-[13.5px] font-medium text-pearl">DXF · CAO / CNC</div>
+              <div class="text-[11px] text-ash leading-snug mt-0.5">
+                R12 en mm, calques CUT / FRAME / AXIS — laser, plasma, CAO.
+              </div>
+            </button>
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
 </header>

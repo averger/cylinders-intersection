@@ -59,6 +59,14 @@ impl Cs {
         self.push(&format!("{g:.3} G"));
     }
 
+    fn stroke_rgb(&mut self, r: f64, g: f64, b: f64) {
+        self.push(&format!("{r:.3} {g:.3} {b:.3} RG"));
+    }
+
+    fn fill_rgb(&mut self, r: f64, g: f64, b: f64) {
+        self.push(&format!("{r:.3} {g:.3} {b:.3} rg"));
+    }
+
     fn fill_gray(&mut self, g: f64) {
         self.push(&format!("{g:.3} g"));
     }
@@ -257,7 +265,7 @@ fn draw_model(cs: &mut Cs, doc: &ExportDocument, sheet: &Sheet) {
         // wrap-alignment marks — match them with lines traced on the tube.
         cs.save();
         cs.line_width(0.12);
-        cs.stroke_gray(0.35);
+        cs.stroke_rgb(0.20, 0.55, 0.70);
         cs.dash(3.0, 1.2);
         let (_fx, fy, _fw, fh) = sheet.frame;
         let gens = sheet.generatrices();
@@ -268,6 +276,7 @@ fn draw_model(cs: &mut Cs, doc: &ExportDocument, sheet: &Sheet) {
         // Axis-plane datum v = 0: longitudinal positioning reference.
         let (_, v0, _, v1) = sheet.bbox;
         if v0 < 0.0 && v1 > 0.0 {
+            cs.stroke_gray(0.25);
             cs.dash(5.0, 1.6);
             cs.segment(sheet.bbox.0, 0.0, sheet.bbox.2, 0.0);
         }
@@ -283,22 +292,27 @@ fn draw_model(cs: &mut Cs, doc: &ExportDocument, sheet: &Sheet) {
         }
 
         if doc.layers.labels {
-            cs.fill_gray(0.35);
+            cs.fill_rgb(0.20, 0.55, 0.70);
             for &(u, deg) in &gens {
                 cs.text(1, 2.4, u + 0.8, fy + 0.9, &format!("{deg}°"));
             }
             if v0 < 0.0 && v1 > 0.0 {
+                cs.fill_gray(0.25);
                 cs.text(1, 2.0, sheet.bbox.0 + 1.0, 0.7, "réf. plan des axes");
             }
         }
         cs.restore();
     }
 
-    // The cut line itself — pure black, exact requested width.
+    // The cut line itself — the pattern's accent colour, mirroring the 2D
+    // view (kept dark enough to trace and cut confidently).
     cs.save();
     cs.solid();
     cs.line_width(doc.cut_width_mm);
-    cs.stroke_gray(0.0);
+    match sheet.kind {
+        super::PatternKind::Branch => cs.stroke_rgb(0.80, 0.27, 0.04),
+        super::PatternKind::Main => cs.stroke_rgb(0.03, 0.45, 0.62),
+    }
     cs.polyline(&sheet.cut, sheet.closed);
     cs.restore();
 
