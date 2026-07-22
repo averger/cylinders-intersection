@@ -51,16 +51,14 @@ pub fn rot_x(phi: f64) -> Matrix3<f64> {
     )
 }
 
-/// Forward parameterisation of cylinder 2 (radius `r2`, tilted by `phi`).
+/// Forward parameterisation of cylinder 2 (radius `r2`, tilted by `phi`):
+/// the point is the matrix product `Rx(φ) · P₀(θ, t)` of equation (1) in
+/// `docs/THEORY.md` — the code mirrors the derivation literally.
 #[inline]
 pub fn cyl2_point(r2: f64, phi: f64, theta: f64, t: f64) -> Vector3<f64> {
-    let (sp, cp) = phi.sin_cos();
     let (st, ct) = theta.sin_cos();
-    Vector3::new(
-        r2 * ct,
-        r2 * st * cp - t * sp,
-        r2 * st * sp + t * cp,
-    )
+    let p0 = Vector3::new(r2 * ct, r2 * st, t);
+    rot_x(phi) * p0
 }
 
 /// Standardised summary of the bounding box of a list of 2D points.
