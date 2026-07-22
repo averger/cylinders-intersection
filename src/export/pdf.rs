@@ -269,8 +269,20 @@ fn draw_model(cs: &mut Cs, doc: &ExportDocument, sheet: &Sheet) {
         cs.dash(3.0, 1.2);
         let (_fx, fy, _fw, fh) = sheet.frame;
         let gens = sheet.generatrices();
-        for &(u, _) in &gens {
-            cs.segment(u, fy, u, fy + fh);
+        for &(u, deg) in &gens {
+            if deg == 0 {
+                // θ = 0 reference generatrix — the wrap-alignment datum,
+                // essential for phase-shifted patterns: solid and strong.
+                cs.solid();
+                cs.line_width(0.3);
+                cs.stroke_rgb(0.80, 0.29, 0.05);
+                cs.segment(u, fy, u, fy + fh);
+                cs.line_width(0.12);
+                cs.stroke_rgb(0.20, 0.55, 0.70);
+                cs.dash(3.0, 1.2);
+            } else {
+                cs.segment(u, fy, u, fy + fh);
+            }
         }
 
         // Axis-plane datum v = 0: longitudinal positioning reference.
@@ -292,9 +304,14 @@ fn draw_model(cs: &mut Cs, doc: &ExportDocument, sheet: &Sheet) {
         }
 
         if doc.layers.labels {
-            cs.fill_rgb(0.20, 0.55, 0.70);
             for &(u, deg) in &gens {
-                cs.text(1, 2.4, u + 0.8, fy + 0.9, &format!("{deg}°"));
+                if deg == 0 {
+                    cs.fill_rgb(0.80, 0.29, 0.05);
+                    cs.text(2, 2.4, u + 0.8, fy + 0.9, "0° réf");
+                } else {
+                    cs.fill_rgb(0.20, 0.55, 0.70);
+                    cs.text(1, 2.4, u + 0.8, fy + 0.9, &format!("{deg}°"));
+                }
             }
             if v0 < 0.0 && v1 > 0.0 {
                 cs.fill_gray(0.25);

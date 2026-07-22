@@ -12,6 +12,12 @@
     { label: "Cyl / Plan", value: "cyl_plane" as Mode },
   ];
 
+  // The second plane tilt is rare — revealed on demand.
+  let showPhiY = $state(false);
+  $effect(() => {
+    if (store.params.angleYDeg !== 0) showPhiY = true;
+  });
+
   const branchOptions = [
     { label: "Extérieure", value: "outer" as Branch },
     { label: "Intérieure", value: "inner" as Branch },
@@ -79,20 +85,37 @@
       />
 
       {#if p.mode === "cyl_plane"}
-        <Slider
-          label="Inclinaison selon Y · φy"
-          unit="°"
-          min={-85}
-          max={85}
-          step={0.5}
-          value={p.angleYDeg}
-          decimals={1}
-          hint="bascule du plan autour de l'axe Y — plan pleinement orienté"
-          onchange={(v) => {
-            store.params = { ...store.params, angleYDeg: v };
-            store.compute();
-          }}
-        />
+        <label class="flex items-center gap-2 cursor-pointer text-[12px] text-silver -mt-1">
+          <input
+            type="checkbox"
+            class="accent-[#ff5b1a] w-3.5 h-3.5"
+            checked={showPhiY}
+            onchange={(e) => {
+              showPhiY = (e.currentTarget as HTMLInputElement).checked;
+              if (!showPhiY && store.params.angleYDeg !== 0) {
+                store.params = { ...store.params, angleYDeg: 0 };
+                store.compute();
+              }
+            }}
+          />
+          Plan orienté — second angle φy (rare)
+        </label>
+        {#if showPhiY}
+          <Slider
+            label="Inclinaison selon Y · φy"
+            unit="°"
+            min={-85}
+            max={85}
+            step={0.5}
+            value={p.angleYDeg}
+            decimals={1}
+            hint="déphase le gabarit autour du tube — caler sur la génératrice 0°"
+            onchange={(v) => {
+              store.params = { ...store.params, angleYDeg: v };
+              store.compute();
+            }}
+          />
+        {/if}
       {/if}
 
       {#if p.mode === "cyl_plane"}

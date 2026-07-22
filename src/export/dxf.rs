@@ -162,10 +162,18 @@ fn write_sheet(w: &mut DxfWriter, sheet: &Sheet, offset_x: f64) {
     // True generatrices with angle labels, alignment ticks on the cut line,
     // and the axis-plane datum — the wrap-alignment marks.
     for (g, deg) in sheet.generatrices() {
-        w.line("AXIS", g + dx, fy, g + dx, fy + fh);
-        w.text("AXIS", g + dx + 0.8, fy + 0.9, 2.4, &format!("{deg}d"));
+        // θ = 0 goes to the dedicated REF layer (wrap-alignment datum).
+        let layer = if deg == 0 { "REF" } else { "AXIS" };
+        w.line(layer, g + dx, fy, g + dx, fy + fh);
+        w.text(
+            layer,
+            g + dx + 0.8,
+            fy + 0.9,
+            2.4,
+            &if deg == 0 { "0d REF".to_string() } else { format!("{deg}d") },
+        );
         for v in sheet.curve_crossings(g) {
-            w.line("AXIS", g + dx - 2.5, v, g + dx + 2.5, v);
+            w.line(layer, g + dx - 2.5, v, g + dx + 2.5, v);
         }
     }
     if sheet.bbox.1 < 0.0 && sheet.bbox.3 > 0.0 {
@@ -200,6 +208,7 @@ pub fn render_dxf(doc: &ExportDocument) -> Result<String, ExportError> {
         ("CUT", 7),
         ("FRAME", 3),
         ("AXIS", 4),
+        ("REF", 1),
         ("TEXT", 2),
         ("ANNOT", 6),
     ]);

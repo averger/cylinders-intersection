@@ -61,12 +61,14 @@
   let gens = $derived.by(() => {
     if (!box || circumference <= 0) return [];
     const step = circumference / 4;
-    const out: { u: number; deg: number }[] = [];
+    const out: { u: number; deg: number; ref: boolean }[] = [];
     const k0 = Math.floor((box.uMin - 1e-9) / step);
     for (let k = k0; k * step <= box.uMin + box.w + 1e-9; k++) {
       const u = k * step;
       if (u < box.uMin - 1e-9) continue;
-      out.push({ u, deg: ((k * 90) % 360 + 360) % 360 });
+      // k multiple of 4 ⇔ the θ = 0 generatrix — THE wrap-alignment datum,
+      // essential when the pattern is phase-shifted (oriented plane).
+      out.push({ u, deg: ((k * 90) % 360 + 360) % 360, ref: k % 4 === 0 });
     }
     return out;
   });
@@ -194,11 +196,13 @@
     if (editor.layers.axis) {
       for (const g of gens) {
         parts.push(
-          `<line x1="${X(g.u).toFixed(2)}" y1="${Y(box.vMin).toFixed(2)}" x2="${X(g.u).toFixed(2)}" y2="${Y(box.vMin + box.h).toFixed(2)}" stroke="#555" stroke-width="0.12" stroke-dasharray="3 1.2"/>`,
+          g.ref
+            ? `<line x1="${X(g.u).toFixed(2)}" y1="${Y(box.vMin).toFixed(2)}" x2="${X(g.u).toFixed(2)}" y2="${Y(box.vMin + box.h).toFixed(2)}" stroke="#cc4a0c" stroke-width="0.3"/>`
+            : `<line x1="${X(g.u).toFixed(2)}" y1="${Y(box.vMin).toFixed(2)}" x2="${X(g.u).toFixed(2)}" y2="${Y(box.vMin + box.h).toFixed(2)}" stroke="#555" stroke-width="0.12" stroke-dasharray="3 1.2"/>`,
         );
         if (editor.layers.labels)
           parts.push(
-            `<text x="${(X(g.u) + 0.8).toFixed(2)}" y="${(Y(box.vMin) - 0.9).toFixed(2)}" font-size="2.4" fill="#555" font-family="Helvetica, Arial, sans-serif">${g.deg}°</text>`,
+            `<text x="${(X(g.u) + 0.8).toFixed(2)}" y="${(Y(box.vMin) - 0.9).toFixed(2)}" font-size="2.4" fill="${g.ref ? "#cc4a0c" : "#555"}" font-family="Helvetica, Arial, sans-serif">${g.ref ? `${g.deg}° réf` : `${g.deg}°`}</text>`,
           );
       }
       if (showDatum) {
@@ -301,19 +305,24 @@
             y1={Y(box.vMin)}
             x2={X(g.u)}
             y2={Y(box.vMin + box.h)}
-            style="stroke: color-mix(in srgb, var(--cyan) 30%, transparent)"
-            stroke-width={viewW / 1400}
-            stroke-dasharray="{viewW / 140} {viewW / 300}"
+            style="stroke: {g.ref
+              ? 'var(--ember)'
+              : 'color-mix(in srgb, var(--cyan) 30%, transparent)'}"
+            stroke-width={g.ref ? viewW / 600 : viewW / 1400}
+            stroke-dasharray={g.ref ? "none" : `${viewW / 140} ${viewW / 300}`}
           />
           {#if editor.layers.labels}
             <text
               x={X(g.u) + viewW / 300}
               y={Y(box.vMin) - viewH / 90}
               font-size={Math.max(2, viewW / 90)}
-              style="fill: color-mix(in srgb, var(--cyan) 70%, transparent)"
+              style="fill: {g.ref
+                ? 'var(--ember)'
+                : 'color-mix(in srgb, var(--cyan) 70%, transparent)'}"
+              font-weight={g.ref ? "600" : "400"}
               font-family="JetBrains Mono, monospace"
             >
-              {g.deg}°
+              {g.ref ? `${g.deg}° · réf` : `${g.deg}°`}
             </text>
           {/if}
         {/each}

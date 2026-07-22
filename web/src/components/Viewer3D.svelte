@@ -653,6 +653,28 @@
         solidsGroup.add(border);
       }
 
+      // θ = 0 reference generatrix, traced on the tube itself — the mark
+      // to align the (possibly phase-shifted) template against.
+      {
+        const tanY = Math.tan(payload.phi_y ?? 0);
+        const zTop = store.params.z0 - r1 * tanY;
+        const rr = r1 * 1.003;
+        const refLine = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(rr, bottomZ, 0),
+            new THREE.Vector3(rr, zTop, 0),
+          ]),
+          new THREE.LineBasicMaterial({ color: pal.curve, transparent: true, opacity: 0.95 }),
+        );
+        solidsGroup.add(refLine);
+        anchors.push({
+          text: "génératrice 0° · réf",
+          pos: new THREE.Vector3(rr, bottomZ * 0.35 + zTop * 0.65, 0),
+          color: "var(--ember)",
+          dy: 40,
+        });
+      }
+
       const cap = buildPlaneCap(payload);
       if (cap) {
         const capMat = new THREE.MeshStandardMaterial({
