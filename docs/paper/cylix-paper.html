@@ -101,8 +101,8 @@ polyligne, dont l'erreur est bornée explicitement. Nous précisons la topologie
 rapport des rayons, le comportement aux points de tangence — tangente verticale pour un zéro simple
 du discriminant (\(R_2 > R_1\)), point anguleux de pentes finies \(-\tan(\varphi/2)\) et
 \(+\cot(\varphi/2)\) pour le zéro double (\(R_1 = R_2\)) — et retrouvons comme cas particuliers la
-formule traditionnelle de traçage à 90° et la sinusoïde de la coupe plane. Chaque énoncé est vérifié
-mécaniquement (25 contrôles symboliques et numériques) et l'implémentation Rust coïncide avec une
+formule traditionnelle de traçage à 90° et la sinusoïde de la coupe plane — étendue au plan <i>pleinement orienté</i> (deux basculements), dont le développé reste une sinusoïde exacte, simplement déphasée. Chaque énoncé est vérifié
+mécaniquement (26 contrôles symboliques et numériques) et l'implémentation Rust coïncide avec une
 implémentation NumPy indépendante à moins de \(2\times10^{-13}\) mm sur l'ensemble des régimes.</p>
 </div>
 
@@ -226,6 +226,24 @@ $$v(u) \;=\; z_0 \;-\; R_1\tan\varphi\,\sin\!\frac{u}{R_1},$$
 <p>de période \(2\pi R_1\) et d'amplitude crête-à-crête \(2R_1\lvert\tan\varphi\rvert\) — droite à
 \(\varphi=0\), divergence pour \(\varphi\to\pm\pi/2\) (plan parallèle à l'axe, exclu).</p>
 
+<h3>5.1 Plan pleinement orienté</h3>
+<p>Le cas général d'un plan basculé à la fois autour de \(Ox\) (angle \(\varphi_x\)) et de
+\(Oy\) (angle \(\varphi_y\)) s'écrit \(z = z_0 - y\tan\varphi_x - x\tan\varphi_y\), de
+normale proportionnelle à \((\tan\varphi_y,\ \tan\varphi_x,\ 1)\). En posant
+\(a=\tan\varphi_y\) et \(b=\tan\varphi_x\), l'identité
+\(b\sin\theta + a\cos\theta = \sqrt{a^2+b^2}\,\sin(\theta+\psi)\) donne le développé</p>
+<div class="eqn"><div class="m">
+$$v(u) \;=\; z_0 \;-\; R_1\sqrt{a^2+b^2}\,
+\sin\!\Bigl(\frac{u}{R_1}+\psi\Bigr),
+\qquad \psi = \operatorname{atan2}(a,\,b) :$$
+</div><div class="no">(8')</div></div>
+<p>une sinusoïde <b>exacte, déphasée de \(\psi\)</b>, d'amplitude crête-à-crête
+\(2R_1\sqrt{\tan^2\varphi_x+\tan^2\varphi_y}\) ; l'angle réel entre le plan et la section
+droite vaut \(\arctan\sqrt{a^2+b^2}\), et le second basculement ne fait que tourner la phase du
+gabarit autour du tube. Conséquence pratique : le gabarit déphasé perd la symétrie qui permet de le
+positionner à l'œil — le calage s'effectue sur la <b>génératrice de référence
+\(\theta=0\)</b>, tracée sur le tube puis alignée avec le repère correspondant du développé.</p>
+
 <h2>6. Points de tangence</h2>
 <p>Aux zéros de \(\Delta\) (\(R_2\lvert\cos\theta\rvert=R_1\)), les deux branches coïncident&nbsp;:
 la génératrice est tangente au cylindre principal. Le comportement local dépend de la
@@ -243,7 +261,7 @@ unilatérales du développé restent finies&nbsp;:
 le gabarit présente un point anguleux — à \(\varphi=\pi/2\) on retrouve les pentes \(\mp 1\) des
 arches en \(\lvert\sin\rvert\) du solide de Steinmetz.</li>
 </ul>
-<p>Pour \(R_2<R_1\), \(\Delta>0\) partout&nbsp;: courbes analytiques lisses, aucun traitement
+<p>Pour \(R_2 &lt; R_1\), \(\Delta>0\) partout&nbsp;: courbes analytiques lisses, aucun traitement
 spécial n'est requis puisque (4) reste continue.</p>
 
 <h2>7. Discrétisation et bornes d'erreur</h2>
@@ -258,9 +276,9 @@ par la densité d'échantillonnage et la continuité de (4).</p>
 
 <h2>8. Vérification mécanique et validation croisée</h2>
 <p>Chaque énoncé de cet article est vérifié par un script symbolique et numérique
-(SymPy/NumPy, 25 contrôles)&nbsp;: coefficients (2), forme fermée (3), racines (4) sur 200 tirages
+(SymPy/NumPy, 26 contrôles)&nbsp;: coefficients (2), forme fermée (3), racines (4) sur 200 tirages
 aléatoires, condition d'existence, première forme fondamentale, symétries, transfert (6), formule
-(7), appartenance au plan et demi-axes de l'ellipse, sinusoïde (8) et son amplitude, factorisation
+(7), appartenance au plan et demi-axes de l'ellipse, sinusoïdes (8) et (8') — amplitude et identité de déphasage —, factorisation
 de Steinmetz, divergence de pente au zéro simple et pentes \(-\tan(\varphi/2)\) /
 \(+\cot(\varphi/2)\) au zéro double. Par ailleurs, l'implémentation Rust du moteur et une
 implémentation NumPy indépendante coïncident sur les trois sorties (courbe 3D, gabarit du tube,
@@ -285,7 +303,7 @@ expose le calcul par API et produit les gabarits à l'échelle&nbsp;1:1&nbsp;: P
 millimétrique tuilé sur pages ISO avec repères d'assemblage et règle de contrôle de 100&nbsp;mm
 (l'impression « taille réelle » se vérifie au réglet), DXF R12 pour les chaînes CAO/CNC, SVG.
 L'interface (Svelte/WebGL) présente la pièce en 3D — chaque cylindre arrêté à l'intersection — et
-les deux mises à plat annotables. Le tuilage ne couvre que l'emprise de la courbe et les pages sans
+les deux mises à plat annotables ; le mode plan accepte les deux basculements (8') et matérialise la génératrice \(\theta=0\) sur la pièce comme sur les gabarits. Le tuilage ne couvre que l'emprise de la courbe et les pages sans
 trait de coupe sont supprimées.</p>
 
 <h2>Références</h2>
