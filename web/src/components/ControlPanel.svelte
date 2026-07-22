@@ -87,9 +87,9 @@
 
       {#if p.mode === "cyl_plane"}
         <div class="flex items-center justify-between -mt-1">
-          <div class="leading-tight">
-            <div class="text-[12px] text-silver">Plan orienté</div>
-            <div class="text-[10px] text-ash/70">second angle φy</div>
+          <div class="flex flex-col">
+            <span class="text-[10px] uppercase tracking-[0.18em] text-ash">Plan orienté</span>
+            <span class="text-[10px] text-ash/70">second angle φy</span>
           </div>
           <Switch
             checked={showPhiY}

@@ -32,6 +32,39 @@
   }
   let anchors: Anchor[] = [];
   let leadersEl = $state<SVGSVGElement | undefined>(undefined);
+  let triadEl = $state<SVGSVGElement | undefined>(undefined);
+
+  // Math-space axes (the ones the parameters refer to: Z along the main
+  // tube, φx around X, φy around Y) mapped to three-space directions.
+  const TRIAD_AXES = [
+    { label: "X", dir: new THREE.Vector3(1, 0, 0), color: "#e04c0d" },
+    { label: "Y", dir: new THREE.Vector3(0, 0, -1), color: "#2e9e63" },
+    { label: "Z", dir: new THREE.Vector3(0, 1, 0), color: "#0b85b8" },
+  ];
+
+  /** Orientation gizmo: project the axes through the camera rotation. */
+  function updateTriad(cam: THREE.Camera) {
+    if (!triadEl) return;
+    const q = cam.quaternion.clone().invert();
+    const L = 24;
+    const lines = triadEl.querySelectorAll("line");
+    const texts = triadEl.querySelectorAll("text");
+    TRIAD_AXES.forEach((a, i) => {
+      const v = a.dir.clone().applyQuaternion(q);
+      const x2 = 34 + v.x * L;
+      const y2 = 34 - v.y * L;
+      lines[i]?.setAttribute("x2", String(x2));
+      lines[i]?.setAttribute("y2", String(y2));
+      const tx = 34 + v.x * (L + 8);
+      const ty = 34 - v.y * (L + 8);
+      texts[i]?.setAttribute("x", String(tx));
+      texts[i]?.setAttribute("y", String(ty + 3));
+      // Slightly fade axes pointing away from the camera.
+      const op = v.z < 0 ? "0.45" : "1";
+      lines[i]?.setAttribute("opacity", op);
+      texts[i]?.setAttribute("opacity", op);
+    });
+  }
 
   // Camera target / orbit state (lightweight orbit controls — no extra dep).
   let target = new THREE.Vector3(0, 0, 0);
@@ -837,6 +870,7 @@
     if (renderer && scene && camera) {
       renderer.render(scene, camera);
       updateLabels(camera);
+      updateTriad(camera);
     }
     raf = requestAnimationFrame(tick);
   }
@@ -1012,6 +1046,27 @@
   <div bind:this={container} class="w-full h-full"></div>
   <svg bind:this={leadersEl} class="absolute inset-0 w-full h-full pointer-events-none"></svg>
   <div bind:this={labelsEl} class="absolute inset-0 overflow-hidden pointer-events-none"></div>
+
+  <!-- Orientation triad (math axes: Z along the main tube) -->
+  <div class="absolute right-4 bottom-4 pointer-events-none">
+    <svg bind:this={triadEl} viewBox="0 0 68 68" class="w-[68px] h-[68px]">
+      <circle cx="34" cy="34" r="32" style="fill: var(--panel); stroke: var(--line-2)" stroke-width="1" />
+      {#each TRIAD_AXES as a (a.label)}
+        <line x1="34" y1="34" x2="34" y2="34" stroke={a.color} stroke-width="2" stroke-linecap="round" />
+      {/each}
+      {#each TRIAD_AXES as a (a.label)}
+        <text
+          x="34"
+          y="34"
+          fill={a.color}
+          font-size="9"
+          font-weight="700"
+          text-anchor="middle"
+          font-family="JetBrains Mono, monospace">{a.label}</text
+        >
+      {/each}
+    </svg>
+  </div>
 
   <!-- Bottom toolbar -->
   <div class="absolute left-4 bottom-4 flex items-center gap-2">
