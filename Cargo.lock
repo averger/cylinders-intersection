@@ -265,8 +265,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "cylinders-intersection"
-version = "0.1.0"
+name = "cylix"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "axum",

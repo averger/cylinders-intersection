@@ -1,14 +1,13 @@
 /**
- * State of the export studio (the pre-export SVG editor).  Owns everything
- * the user can adjust before producing a PDF / DXF: page setup, layers,
- * title block, annotations — and mirrors it into the backend document model.
+ * Export-studio facade — reads and writes the editor state of the ACTIVE
+ * study (each study keeps its own page setup, layers and annotations), and
+ * drives the backend PDF / DXF exports.
  */
 
 import { store } from "./store.svelte";
 import {
   exportApi,
   planTiles,
-  type Annotation,
   type ExportDocument,
   type Layers,
   type PageSpec,
@@ -18,31 +17,56 @@ import {
   type TitleBlock,
 } from "./export";
 
-function today(): string {
-  const d = new Date();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mm}-${dd}`;
-}
-
 class EditorStore {
-  page = $state<PageSpec>({ format: "a4", orientation: "landscape", margin_mm: 10 });
-  scale = $state<ScaleMode>("one_to_one");
-  layers = $state<Layers>({ grid: true, frame: true, axis: true, labels: true, scale_bar: true });
-  titleBlock = $state<TitleBlock>({
-    title: "",
-    project: "",
-    author: "",
-    date: today(),
-    notes: "",
-  });
-  annotations = $state<Annotation[]>([]);
-  cutWidth = $state(0.35);
-  /** Pattern currently shown in the preview. */
-  active = $state<PatternKind>("branch");
+  /** UI-only state (not persisted per study). */
   selected = $state<number | null>(null);
   busy = $state<null | "pdf" | "dxf">(null);
   error = $state<string | null>(null);
+
+  // ----- persisted, per active study --------------------------------------
+  get page(): PageSpec {
+    return store.editor.page;
+  }
+  set page(v: PageSpec) {
+    store.editor.page = v;
+    store.persist();
+  }
+
+  get scale(): ScaleMode {
+    return store.editor.scale;
+  }
+  set scale(v: ScaleMode) {
+    store.editor.scale = v;
+    store.persist();
+  }
+
+  get layers(): Layers {
+    return store.editor.layers;
+  }
+  set layers(v: Layers) {
+    store.editor.layers = v;
+    store.persist();
+  }
+
+  get titleBlock(): TitleBlock {
+    return store.editor.titleBlock;
+  }
+  set titleBlock(v: TitleBlock) {
+    store.editor.titleBlock = v;
+    store.persist();
+  }
+
+  get annotations() {
+    return store.editor.annotations;
+  }
+
+  get cutWidth(): number {
+    return store.editor.cutWidth;
+  }
+  set cutWidth(v: number) {
+    store.editor.cutWidth = v;
+    store.persist();
+  }
 
   /** Patterns available for the current computation result. */
   get available(): PatternKind[] {
@@ -66,15 +90,16 @@ class EditorStore {
   }
 
   document(): ExportDocument {
+    const e = store.editor;
     return {
       source: this.source(),
-      page: { ...this.page },
-      scale: this.scale,
-      layers: { ...this.layers },
-      title_block: { ...this.titleBlock },
-      annotations: this.annotations.map((a) => ({ ...a })),
+      page: { ...e.page },
+      scale: e.scale,
+      layers: { ...e.layers },
+      title_block: { ...e.titleBlock },
+      annotations: e.annotations.map((a) => ({ ...a })),
       patterns: this.available,
-      cut_width_mm: this.cutWidth,
+      cut_width_mm: e.cutWidth,
     };
   }
 
@@ -114,29 +139,25 @@ class EditorStore {
     return { uMin, vMin, w, h: Math.max(vMax - vMin, 0.1) };
   }
 
-  addAnnotation(u: number, v: number) {
-    this.annotations.push({
-      pattern: this.active,
-      u,
-      v,
-      text: "annotation",
-      size_mm: 4,
-    });
-    this.selected = this.annotations.length - 1;
+  addAnnotation(pattern: PatternKind, u: number, v: number) {
+    store.editor.annotations.push({ pattern, u, v, text: "annotation", size_mm: 4 });
+    this.selected = store.editor.annotations.length - 1;
+    store.persist();
   }
 
   removeAnnotation(index: number) {
-    this.annotations.splice(index, 1);
+    store.editor.annotations.splice(index, 1);
     if (this.selected === index) this.selected = null;
     else if (this.selected !== null && this.selected > index) this.selected -= 1;
+    store.persist();
   }
 
   async exportPdf() {
-    await this.run("pdf", () => exportApi.pdf(this.document()));
+    await this.run("pdf", () => exportApi.pdf(this.document(), `cylix-${slug()}.pdf`));
   }
 
   async exportDxf() {
-    await this.run("dxf", () => exportApi.dxf(this.document()));
+    await this.run("dxf", () => exportApi.dxf(this.document(), `cylix-${slug()}.dxf`));
   }
 
   private async run(kind: "pdf" | "dxf", fn: () => Promise<void>) {
@@ -150,6 +171,15 @@ class EditorStore {
       this.busy = null;
     }
   }
+}
+
+function slug(): string {
+  return store.active.name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || "etude";
 }
 
 export const editor = new EditorStore();

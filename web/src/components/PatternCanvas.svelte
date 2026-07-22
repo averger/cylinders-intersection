@@ -1,0 +1,334 @@
+<script lang="ts">
+  // One developed pattern (mm coordinates) with its layers, 1:1 tile
+  // overlay and draggable annotations.  Double-click adds an annotation.
+  import { store } from "../lib/store.svelte";
+  import { editor } from "../lib/editor.svelte";
+  import { downloadSVG } from "../lib/svg";
+  import { planTiles, tileLabel, type PatternKind } from "../lib/export";
+
+  interface Props {
+    kind: PatternKind;
+  }
+  let { kind }: Props = $props();
+
+  const MARGIN = 16; // mm of breathing room around the drawing
+
+  let points = $derived.by(() => {
+    const r = store.result;
+    if (!r) return [];
+    return kind === "branch" ? r.dev_branch : (r.dev_main ?? []);
+  });
+  // The branch development is always an open curve (u = 0 meets u = 2πR on
+  // the rolled tube); the gueule de loup closes when the backend says so.
+  let closed = $derived(kind === "branch" ? false : (store.result?.dev_main_closed ?? false));
+  let box = $derived(editor.patternBox(kind));
+
+  let accent = $derived(kind === "branch" ? "#ff5b1a" : "#29c2ff");
+  let title = $derived(
+    kind === "branch"
+      ? store.result?.mode === "cyl_cyl"
+        ? "Développé tube incliné — Ø₂"
+        : "Développé du tube — coupe plane"
+      : "Gueule de loup — Ø₁",
+  );
+  let diameter = $derived.by(() => {
+    const r = store.result;
+    if (!r) return 0;
+    return kind === "branch" ? (r.r2 ?? r.r1) * 2 : r.r1 * 2;
+  });
+
+  let viewW = $derived(box ? box.w + MARGIN * 2 : 100);
+  let viewH = $derived(box ? box.h + MARGIN * 2 : 60);
+
+  function X(u: number): number {
+    return box ? u - box.uMin + MARGIN : 0;
+  }
+  function Y(v: number): number {
+    return box ? box.h - (v - box.vMin) + MARGIN : 0;
+  }
+
+  let cutPath = $derived.by(() => {
+    if (points.length === 0) return "";
+    const d = points
+      .map((p, i) => `${i === 0 ? "M" : "L"}${X(p.u).toFixed(3)} ${Y(p.v).toFixed(3)}`)
+      .join(" ");
+    return closed ? `${d} Z` : d;
+  });
+
+  function gridLines(min: number, span: number): { at: number; major: boolean }[] {
+    const out: { at: number; major: boolean }[] = [];
+    const start = Math.floor(min / 10) * 10;
+    for (let g = start; g <= min + span + 1e-9; g += 10) {
+      if (g < min - 1e-9) continue;
+      out.push({ at: g, major: Math.abs(g / 50 - Math.round(g / 50)) < 1e-9 });
+    }
+    return out;
+  }
+  let uGrid = $derived(box ? gridLines(box.uMin, box.w) : []);
+  let vGrid = $derived(box ? gridLines(box.vMin, box.h) : []);
+
+  let tiles = $derived.by(() => {
+    if (!box || editor.scale !== "one_to_one") return [];
+    const plan = planTiles(editor.page, box.w, box.h);
+    const out: { x: number; y: number; w: number; h: number; label: string }[] = [];
+    for (let row = 0; row < plan.rows; row++) {
+      for (let col = 0; col < plan.cols; col++) {
+        const u = box.uMin + col * plan.stepX;
+        const vTop = box.vMin + box.h - row * plan.stepY;
+        out.push({ x: X(u), y: Y(vTop), w: plan.viewW, h: plan.viewH, label: tileLabel(col, row) });
+      }
+    }
+    return out;
+  });
+
+  let annotationsHere = $derived(
+    editor.annotations.map((a, index) => ({ a, index })).filter(({ a }) => a.pattern === kind),
+  );
+
+  // ----- annotation dragging ----------------------------------------------
+  let svgEl = $state<SVGSVGElement | undefined>(undefined);
+  let dragIndex: number | null = null;
+
+  function clientToMm(e: PointerEvent | MouseEvent): { u: number; v: number } | null {
+    if (!svgEl || !box) return null;
+    const ctm = svgEl.getScreenCTM();
+    if (!ctm) return null;
+    const local = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+    return { u: local.x - MARGIN + box.uMin, v: box.h - (local.y - MARGIN) + box.vMin };
+  }
+
+  function startDrag(e: PointerEvent, index: number) {
+    e.stopPropagation();
+    dragIndex = index;
+    editor.selected = index;
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+  }
+  function moveDrag(e: PointerEvent) {
+    if (dragIndex === null) return;
+    const mm = clientToMm(e);
+    if (!mm) return;
+    editor.annotations[dragIndex].u = Math.round(mm.u * 10) / 10;
+    editor.annotations[dragIndex].v = Math.round(mm.v * 10) / 10;
+  }
+  function endDrag() {
+    if (dragIndex !== null) store.persist();
+    dragIndex = null;
+  }
+
+  function onBackgroundDblClick(e: MouseEvent) {
+    const mm = clientToMm(e);
+    if (mm) editor.addAnnotation(kind, Math.round(mm.u), Math.round(mm.v));
+  }
+
+  // ----- standalone SVG export (print colours, 1 mm = 1 unit) -------------
+  export function exportSVG() {
+    if (!box || points.length === 0) return;
+    const esc = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const parts: string[] = [
+      `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${viewW.toFixed(2)}mm" height="${viewH.toFixed(2)}mm" viewBox="0 0 ${viewW.toFixed(2)} ${viewH.toFixed(2)}" shape-rendering="geometricPrecision">`,
+      `<rect width="100%" height="100%" fill="#ffffff"/>`,
+    ];
+    if (editor.layers.grid) {
+      for (const g of uGrid)
+        parts.push(
+          `<line x1="${X(g.at).toFixed(2)}" y1="${Y(box.vMin).toFixed(2)}" x2="${X(g.at).toFixed(2)}" y2="${Y(box.vMin + box.h).toFixed(2)}" stroke="${g.major ? "#b9b9b9" : "#e2e2e2"}" stroke-width="${g.major ? 0.09 : 0.05}"/>`,
+        );
+      for (const g of vGrid)
+        parts.push(
+          `<line x1="${X(box.uMin).toFixed(2)}" y1="${Y(g.at).toFixed(2)}" x2="${X(box.uMin + box.w).toFixed(2)}" y2="${Y(g.at).toFixed(2)}" stroke="${g.major ? "#b9b9b9" : "#e2e2e2"}" stroke-width="${g.major ? 0.09 : 0.05}"/>`,
+        );
+    }
+    if (editor.layers.frame) {
+      parts.push(
+        `<rect x="${X(box.uMin).toFixed(2)}" y="${Y(box.vMin + box.h).toFixed(2)}" width="${box.w.toFixed(2)}" height="${box.h.toFixed(2)}" fill="none" stroke="#777" stroke-width="0.15" stroke-dasharray="1.6 1.4"/>`,
+      );
+    }
+    if (editor.layers.axis) {
+      for (let q = 0; q <= 4; q++) {
+        const u = box.uMin + (box.w * q) / 4;
+        parts.push(
+          `<line x1="${X(u).toFixed(2)}" y1="${Y(box.vMin).toFixed(2)}" x2="${X(u).toFixed(2)}" y2="${Y(box.vMin + box.h).toFixed(2)}" stroke="#555" stroke-width="0.12" stroke-dasharray="3 1.2"/>`,
+        );
+        if (editor.layers.labels)
+          parts.push(
+            `<text x="${(X(u) + 0.8).toFixed(2)}" y="${(Y(box.vMin) - 0.9).toFixed(2)}" font-size="2.4" fill="#555" font-family="Helvetica, Arial, sans-serif">${q * 90}°</text>`,
+          );
+      }
+    }
+    parts.push(
+      `<path d="${cutPath}" fill="none" stroke="#000" stroke-width="${editor.cutWidth}" stroke-linejoin="round" stroke-linecap="round"/>`,
+    );
+    for (const { a } of annotationsHere) {
+      parts.push(
+        `<text x="${X(a.u).toFixed(2)}" y="${Y(a.v).toFixed(2)}" font-size="${a.size_mm}" fill="#111" font-family="Helvetica, Arial, sans-serif">${esc(a.text)}</text>`,
+      );
+    }
+    parts.push(`</svg>`);
+    const name = kind === "branch" ? "cylix-tube" : "cylix-gueule-de-loup";
+    downloadSVG(`${name}.svg`, parts.join("\n"));
+  }
+</script>
+
+<section class="glass card-hairline relative overflow-hidden grid-bg flex flex-col min-h-[260px]">
+  <header class="flex items-center justify-between gap-3 px-4 pt-3 pb-1 z-10">
+    <div class="flex items-center gap-3 min-w-0">
+      <span class="pill shrink-0" style="border-color: {accent}55; color: {accent}">{title}</span>
+      {#if store.result}
+        <span class="num text-[10px] text-ash truncate">
+          Ø {diameter.toFixed(1)} mm · largeur {box ? box.w.toFixed(1) : "—"} mm · hauteur {box
+            ? box.h.toFixed(1)
+            : "—"} mm
+        </span>
+      {/if}
+    </div>
+    <button
+      class="text-[10px] uppercase tracking-[0.16em] text-ash hover:text-pearl transition-colors shrink-0"
+      onclick={() => exportSVG()}
+    >
+      svg 1:1 ↓
+    </button>
+  </header>
+
+  {#if box && points.length > 0}
+    <svg
+      bind:this={svgEl}
+      viewBox="0 0 {viewW} {viewH}"
+      preserveAspectRatio="xMidYMid meet"
+      class="w-full flex-1 min-h-0 px-3 pb-3 select-none"
+      role="application"
+      aria-label="{title} — double-clic pour annoter"
+      ondblclick={onBackgroundDblClick}
+      onpointermove={moveDrag}
+      onpointerup={endDrag}
+    >
+      {#if editor.layers.grid}
+        {#each uGrid as g (g.at)}
+          <line
+            x1={X(g.at)}
+            y1={Y(box.vMin)}
+            x2={X(g.at)}
+            y2={Y(box.vMin + box.h)}
+            stroke="rgba(255,255,255,{g.major ? 0.1 : 0.045})"
+            stroke-width={g.major ? viewW / 1600 : viewW / 2600}
+          />
+        {/each}
+        {#each vGrid as g (g.at)}
+          <line
+            x1={X(box.uMin)}
+            y1={Y(g.at)}
+            x2={X(box.uMin + box.w)}
+            y2={Y(g.at)}
+            stroke="rgba(255,255,255,{g.major ? 0.1 : 0.045})"
+            stroke-width={g.major ? viewW / 1600 : viewW / 2600}
+          />
+        {/each}
+      {/if}
+
+      {#if editor.layers.frame}
+        <rect
+          x={X(box.uMin)}
+          y={Y(box.vMin + box.h)}
+          width={box.w}
+          height={box.h}
+          fill="rgba(255,255,255,0.015)"
+          stroke="rgba(255,255,255,0.22)"
+          stroke-width={viewW / 900}
+          stroke-dasharray="{viewW / 180} {viewW / 220}"
+        />
+      {/if}
+
+      {#if editor.layers.axis}
+        {#each [0, 1, 2, 3, 4] as q (q)}
+          <line
+            x1={X(box.uMin + (box.w * q) / 4)}
+            y1={Y(box.vMin)}
+            x2={X(box.uMin + (box.w * q) / 4)}
+            y2={Y(box.vMin + box.h)}
+            stroke="rgba(41,194,255,0.25)"
+            stroke-width={viewW / 1400}
+            stroke-dasharray="{viewW / 140} {viewW / 300}"
+          />
+          {#if editor.layers.labels}
+            <text
+              x={X(box.uMin + (box.w * q) / 4) + viewW / 300}
+              y={Y(box.vMin) - viewH / 90}
+              font-size={Math.max(2, viewW / 90)}
+              fill="rgba(136,223,250,0.65)"
+              font-family="JetBrains Mono, monospace"
+            >
+              {q * 90}°
+            </text>
+          {/if}
+        {/each}
+      {/if}
+
+      {#each tiles as t (t.label)}
+        <rect
+          x={t.x}
+          y={t.y}
+          width={t.w}
+          height={t.h}
+          fill="none"
+          stroke="rgba(255,91,26,0.3)"
+          stroke-width={viewW / 1100}
+        />
+        <text
+          x={t.x + viewW / 250}
+          y={t.y + Math.max(2.6, viewW / 70)}
+          font-size={Math.max(2.6, viewW / 80)}
+          fill="rgba(255,91,26,0.55)"
+          font-family="JetBrains Mono, monospace"
+        >
+          {t.label}
+        </text>
+      {/each}
+
+      <path
+        d={cutPath}
+        fill="none"
+        stroke={accent}
+        stroke-width={Math.max(editor.cutWidth, viewW / 700)}
+        stroke-linejoin="round"
+        stroke-linecap="round"
+      />
+
+      {#if !closed && points.length > 0}
+        <circle cx={X(points[0].u)} cy={Y(points[0].v)} r={viewW / 400} fill={accent} />
+        <circle
+          cx={X(points[points.length - 1].u)}
+          cy={Y(points[points.length - 1].v)}
+          r={viewW / 400}
+          fill={accent}
+        />
+      {/if}
+
+      {#each annotationsHere as { a, index } (index)}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <text
+          x={X(a.u)}
+          y={Y(a.v)}
+          font-size={Math.max(a.size_mm, viewW / 110)}
+          fill={editor.selected === index ? "#ffffff" : "rgba(245,245,247,0.85)"}
+          font-family="Inter, sans-serif"
+          class="cursor-move"
+          onpointerdown={(e) => startDrag(e, index)}
+        >
+          {a.text}
+        </text>
+        {#if editor.selected === index}
+          <circle
+            cx={X(a.u)}
+            cy={Y(a.v)}
+            r={viewW / 260}
+            fill="none"
+            stroke="#ff5b1a"
+            stroke-width={viewW / 1400}
+          />
+        {/if}
+      {/each}
+    </svg>
+  {:else}
+    <div class="flex-1 grid place-items-center text-ash text-sm">Aucune courbe à afficher.</div>
+  {/if}
+</section>

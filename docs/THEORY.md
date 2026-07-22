@@ -98,7 +98,9 @@ $$
 $4ac = 4\sin^2\varphi\bigl(R_2^2\cos^2\theta + R_2^2\sin^2\theta\cos^2\varphi - R_1^2\bigr)$ ;
 les termes en $\sin^2\theta\cos^2\varphi$ s'annulent, il reste (3). ∎
 
-Les solutions sont donc, pour $\sin\varphi \neq 0$ :
+Les solutions sont donc, pour $\varphi \in (0, \pi)$ (donc $\sin\varphi > 0$,
+convention adoptée dans tout ce document — pour $\sin\varphi < 0$ les deux
+branches s'échangent) :
 
 $$
 \boxed{\;
@@ -141,6 +143,14 @@ génératrice à travers la paroi du cylindre principal.
 
 Le paramètre `branch` du moteur sélectionne la racine : `outer` $= t_+$,
 `inner` $= t_-$.
+
+*Remarque (branches vs composantes connexes).* Pour $R_2 \leq R_1$, chaque
+branche $t_\pm$ coïncide avec une composante connexe de l'intersection. Pour
+$R_2 > R_1$ en revanche, les deux composantes connexes (qui encerclent chacune
+le cylindre principal) mélangent points d'entrée et de sortie : les lieux
+$\{t_+\}$ et $\{t_-\}$ restent des courbes bien définies — sortie et entrée de
+paroi — mais ne sont plus des composantes connexes de l'intersection. C'est le
+lieu de sortie (resp. d'entrée) qui est pertinent pour le traçage.
 
 ---
 
@@ -293,18 +303,35 @@ $\varphi \to \pi/2$ (le plan devient parallèle à l'axe — cas exclu par (11))
 
 Aux angles $\theta$ où $\Delta(\theta) = 0$, soit $R_2\lvert\cos\theta\rvert = R_1$,
 les deux branches $t_+$ et $t_-$ coïncident : la génératrice est **tangente** au
-cylindre principal. En ces points :
+cylindre principal. Le comportement local dépend de la **multiplicité** du zéro
+de $\Delta$ :
 
-* le développé du tube présente une tangente verticale (dans le plan $(u_2, v_2)$,
-  $\mathrm{d}v_2/\mathrm{d}u_2 \to \infty$), car
-  $t_\pm'(\theta) \sim \mp R_2^2 \cos\theta\sin\theta / \sqrt{\Delta/4\sin^2\varphi}$ diverge ;
-* la gueule de loup atteint son extrémité en $u_1$ : par (9), $\lvert\cos\alpha\rvert = 1$
-  est atteint précisément quand $R_2\lvert\cos\theta\rvert = R_1$, ce qui n'arrive que si
-  $R_2 \geq R_1$.
+* **$R_2 > R_1$ — zéro simple** en $\cos\theta^* = \pm R_1/R_2$ : le radicande
+  s'annule linéairement, $\sqrt{\smash[b]{\cdot}}$ varie en
+  $\sqrt{\lvert\theta - \theta^*\rvert}$ et $t_\pm'(\theta)$ **diverge** — le
+  développé du tube présente une véritable tangente verticale dans le plan
+  $(u_2, v_2)$. La gueule de loup atteint alors son extrémité en $u_1$ : par
+  (9), $\lvert\cos\alpha\rvert = 1$ précisément quand
+  $R_2\lvert\cos\theta\rvert = R_1$.
+* **$R_2 = R_1 = R$ — zéro double** en $\theta^* \in \{0, \pi\}$ : le radicande
+  vaut $R^2\sin^2\theta$, sa racine $R\lvert\sin\theta\rvert$ est **lipschitzienne**
+  et les pentes unilatérales du développé restent finies. Un calcul direct au
+  voisinage de $\theta^* = 0$ donne, pour la branche $t_+$,
 
-Le moteur échantillonne $\theta$ uniformément sur $[0, 2\pi)$, évalue (4), et
-écarte les échantillons à discriminant négatif ; aucun traitement spécial n'est
-nécessaire aux points de tangence puisque la formule (4) y est continue.
+$$
+\left.\frac{\mathrm{d}v_2}{\mathrm{d}u_2}\right|_{0^-} = -\tan\frac{\varphi}{2},
+\qquad
+\left.\frac{\mathrm{d}v_2}{\mathrm{d}u_2}\right|_{0^+} = +\cot\frac{\varphi}{2} :
+$$
+
+  le gabarit présente un **point anguleux** (et non une tangente verticale) —
+  à $\varphi = \pi/2$ on retrouve les pentes $\mp 1$ des arches en
+  $\lvert\sin\rvert$ du cas Steinmetz (§6.1).
+
+Pour $R_2 < R_1$, $\Delta > 0$ partout : aucune tangence, courbes analytiques
+lisses. Le moteur échantillonne $\theta$ uniformément sur $[0, 2\pi)$, évalue
+(4), et écarte les échantillons à discriminant négatif ; aucun traitement
+spécial n'est nécessaire aux points de tangence puisque (4) y est continue.
 
 ---
 
@@ -376,14 +403,28 @@ comparaison au demi-tour, exactement comme `numpy.unwrap`.
 
 ---
 
-## 9. Validation du moteur
+## 9. Validation
 
-* **Tests unitaires Rust** (`cargo test`) : cas perpendiculaire à rayons égaux
-  (amplitude $t_{\max} = R$), période complète du sifflet, formule fermée (10),
-  symétries des branches, bornes du discriminant ;
-* **Non-régression vs implémentation Python d'origine**
-  (`tubes_intersection_and_unwrap.py`) : mêmes conventions (1), mêmes racines
-  (4), mêmes développés (7)–(8) ;
+Chaque affirmation de ce document est vérifiée mécaniquement — les scripts sont
+versionnés dans [`docs/verification/`](verification/) :
+
+* **Vérification symbolique et numérique**
+  (`verify_theory.py`, SymPy + NumPy, 25 contrôles) : coefficients (2),
+  discriminant (3), racines (4) sur 200 tirages aléatoires, condition
+  d'existence (5), première forme fondamentale (6), symétries §3.1, relation de
+  transfert (9), formule fermée (10), appartenance au plan (12), demi-axes de
+  l'ellipse §4.1, sinusoïde (13) et son amplitude, factorisation de Steinmetz
+  §6.1, divergence de pente au zéro simple et pentes unilatérales
+  $-\tan(\varphi/2)$ / $+\cot(\varphi/2)$ au zéro double (§5) ;
+* **Validation croisée du moteur** (`verify_engine.py`) : le moteur Rust et
+  l'implémentation NumPy de référence (`tubes_intersection_and_unwrap.py`)
+  coïncident à **moins de $2\times10^{-13}$ mm** (courbe 3D, développé branche,
+  gueule de loup) sur 6 configurations couvrant $R_2 < R_1$, $R_2 = R_1$,
+  $R_2 > R_1$, les deux branches et $\varphi \in \{20°, 45°, 60°, 75°, 90°\}$ ;
+* **Tests unitaires Rust** (`cargo test`) : amplitude du cas perpendiculaire,
+  période complète du sifflet, continuité du contour de la gueule de loup
+  (ordre de parcours, détection de fermeture), plans de tuilage et writers
+  PDF/DXF ;
 * **Contrôle métrologique à l'impression** : chaque export porte une règle de
   référence de 100 mm à vérifier au réglet après impression « taille réelle ».
 

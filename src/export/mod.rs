@@ -222,10 +222,12 @@ fn layout_sheet(
     payload: &IntersectionPayload,
     kind: PatternKind,
 ) -> Result<Sheet, ExportError> {
+    // The branch development is an OPEN curve: u = 0 and u = 2πR coincide
+    // once the sheet is rolled, so no closing chord must ever be drawn.
     let (points, closed, circumference, diameter, name) = match kind {
         PatternKind::Branch => (
             &payload.dev_branch,
-            true,
+            false,
             payload
                 .circumference_branch
                 .unwrap_or(payload.circumference_main),
@@ -383,7 +385,8 @@ mod tests {
         let branch = &sheets[0];
         // Frame must span the full unwrapped circumference 2π·r2.
         assert!((branch.frame.2 - std::f64::consts::TAU * 35.0).abs() < 1e-6);
-        assert!(branch.closed);
+        // Branch development: open curve (u = 0 and u = 2πR meet on the tube).
+        assert!(!branch.closed);
         // r2 < r1: the gueule de loup is a closed opening.
         assert!(sheets[1].closed);
     }

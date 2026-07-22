@@ -1,6 +1,9 @@
-# Intersection de deux cylindres inclinés — théorie & mode d’emploi
+# Cylix — gabarits de découpe de cylindres à l'échelle 1:1
 
-*Document de référence rédigé pour expliquer la géométrie et l’usage du script Python (et de la webapp Streamlit) de génération des gabarits (développés) d’intersection de deux cylindres.*
+*Moteur exact d'intersections de cylindres (gueule de loup, coupe en sifflet) et
+outil de production des développés : deux mises à plat — une par cylindre —
+annotables, exportées en PDF vectoriel tuilé 1:1 (à dérouler sur le tube et
+couper directement) et en DXF pour la CAO/CNC.*
 
 — **A. Verger**
 
@@ -9,8 +12,11 @@
 > 📐 **Théorie complète** : la dérivation intégrale (discriminant en forme fermée,
 > isométrie du développé, gueule de loup, cas limites de Steinmetz, bornes
 > d'erreur de discrétisation) est dans **[`docs/THEORY.md`](docs/THEORY.md)** —
-> c'est le document de référence du moteur. Un aperçu interactif (KaTeX) est
-> intégré à l'application, section **Théorie**.
+> document de référence du moteur, destiné à publication. Chaque équation est
+> **vérifiée mécaniquement** (25 contrôles SymPy/NumPy) et le moteur Rust est
+> validé contre la référence NumPy à < 2·10⁻¹³ mm : voir
+> [`docs/verification/`](docs/verification/). L'application, elle, se contente
+> de faire le boulot — la théorie vit dans la doc.
 
 ## Aperçu
 
@@ -19,9 +25,8 @@ Captures Full HD (1920×1080), prêtes pour les réseaux sociaux — dossier
 
 | | |
 |---|---|
-| ![Accueil et scène 3D](docs/screenshots/01-hero.png) | ![Vue 3D temps réel](docs/screenshots/02-scene3d.png) |
-| ![Développés à plat](docs/screenshots/03-developpes.png) | ![Atelier d'export](docs/screenshots/04-atelier.png) |
-| ![Aperçu de la théorie](docs/screenshots/05-theorie.png) | |
+| ![Vue 3D annotée — cylindre × cylindre](docs/screenshots/01-cylix-3d.png) | ![Vue 3D — coupe en sifflet](docs/screenshots/02-cylix-3d-plan.png) |
+| ![Éditeur 2D — les deux mises à plat](docs/screenshots/03-cylix-2d.png) | ![Annotation sur le développé](docs/screenshots/04-cylix-2d-annotation.png) |
 
 ## 1) Théorie (version courte mais complète)
 
@@ -123,24 +128,31 @@ où $\alpha^\uparrow$ est l’angle **déroulé** (*unwrap*) pour supprimer le s
 
 ---
 
-## 2) Webapp Rust + Svelte (gabarits 1 : 1)
+## 2) Cylix — l'application (Rust + Svelte)
 
-L’implémentation de référence est désormais une application autonome — moteur géométrique en **Rust** (Axum + nalgebra), interface **Svelte 5 + Tailwind 4** servie en SPA, vue 3D **Three.js**.
+Application-outil plein écran : moteur géométrique en **Rust** (Axum + nalgebra),
+interface **Svelte 5 + Tailwind 4** servie en SPA, vue 3D **Three.js**.
 
-* Calcul matriciel côté serveur (binaire compilé, formules fermées — cf. `docs/THEORY.md`).
-* Choix entre **cylindre × cylindre** et **cylindre × plan incliné**.
-* **Vue 3D temps réel** (Three.js) : orbite, rotation auto, capture **PNG 1920×1080** intégrée.
-* **Atelier d'export** : éditeur SVG avant export — calques (grille 10 mm, emprise,
-  génératrices 90°, étiquettes, règle), annotations déplaçables à la souris,
-  cartouche, format A4/A3/A2, portrait/paysage.
-* Export **PDF vectoriel mm-exact** : échelle 1:1 **tuilée** sur plusieurs pages avec
-  repères de collage (tuiles A1, B1, …), traits de coupe, cartouche et règle de
-  contrôle 100 mm — ou mode « ajusté » une page avec échelle affichée.
-* Export **DXF R12** (calques `CUT` / `FRAME` / `AXIS` / `TEXT` / `ANNOT`, unités mm)
+* **Layout outil** : paramètres à gauche, viewport central, bascule **3D ↔ 2D**,
+  barre de statut ; **études en onglets** (multi-études, renommage au double-clic,
+  copie des paramètres courants, persistance locale) — comme dans pilegroupx.
+* **Vue 3D annotée** : cylindres bien lisibles, courbe d'intersection en tube
+  émissif, axes, **arc d'angle φ** et étiquettes Ø₁ / Ø₂ projetées ; orbite,
+  rotation auto, capture **PNG 1920×1080** (annotations composées dans l'image).
+* **Vue 2D — les deux mises à plat** : l'intersection développée **sur chaque
+  cylindre** (gabarit du tube incliné = courbe ouverte sur la période complète,
+  gueule de loup = contour fermé), calques (grille 10 mm, emprise, génératrices
+  90°, étiquettes, règle), **annotations** ajoutées au double-clic et déplacées
+  à la souris, cartouche, mise en page A4/A3/A2.
+* Export **PDF vectoriel mm-exact** : échelle **1:1 tuilée** avec repères de
+  collage (tuiles A1, B1, …) — à dérouler sur le tube et couper directement —
+  cartouche et règle de contrôle 100 mm ; ou mode « ajusté » pour aperçu.
+* Export **DXF R12** (calques `CUT` / `FRAME` / `AXIS` / `TEXT` / `ANNOT`, mm)
   pour AutoCAD, QCAD, LibreCAD et chaînes CAM laser/plasma.
-* Export **SVG vectoriel à l’échelle 1 : 1** et **CSV** brut.
-* **Aperçu de la théorie** dans l'app (rendu KaTeX) + mode impression dédié avec
-  règle de référence 100 mm.
+* Export **SVG 1:1** par mise à plat, impression navigateur 1:1.
+
+**Feuille de route** : intersection cylindre × plan *orienté* (normale
+quelconque), export **G-code** direct.
 
 ### 2.1 Pré-requis
 
@@ -160,7 +172,7 @@ cd web && npm install && npm run build && cd ..
 cargo build --release
 
 # 3) lancer
-./target/release/cylinders-intersection --port 8787
+./target/release/cylix --port 8787
 # puis ouvrir http://127.0.0.1:8787
 ```
 
@@ -252,9 +264,10 @@ Exports disponibles depuis chaque carte :
 
 ```
 cylinders-intersection/
-├── Cargo.toml              # crate cylinders-intersection
+├── Cargo.toml              # crate cylix
 ├── docs/
-│   ├── THEORY.md           # dérivation mathématique complète (référence)
+│   ├── THEORY.md           # dérivation mathématique complète (référence, papier)
+│   ├── verification/       # preuves mécaniques : SymPy + croisement Rust/NumPy
 │   └── screenshots/        # captures Full HD 1920×1080 (réseaux sociaux)
 ├── src/
 │   ├── geometry.rs         # rotation X, paramétrisation cyl-2, BBox, unwrap
@@ -267,27 +280,28 @@ cylinders-intersection/
 │   ├── assets.rs           # rust-embed sur web/dist
 │   ├── lib.rs              # re-exports
 │   └── main.rs             # serveur Axum (CLI clap)
-└── web/                    # SPA (Svelte 5 + Tailwind 4 + Three.js + KaTeX)
+└── web/                    # SPA Cylix (Svelte 5 + Tailwind 4 + Three.js)
     ├── src/
-    │   ├── App.svelte
+    │   ├── App.svelte                  # layout outil : header, onglets, sidebar, viewport
     │   ├── main.ts
     │   ├── app.css
     │   ├── components/
-    │   │   ├── Header.svelte
-    │   │   ├── Hero.svelte
-    │   │   ├── ControlPanel.svelte
-    │   │   ├── Viewer3D.svelte         # Three.js : orbite, auto-rotation, PNG 1080p
-    │   │   ├── DevelopedView.svelte    # SVG mm interactif
-    │   │   ├── ExportStudio.svelte     # éditeur avant export (calques, annotations…)
-    │   │   ├── Theory.svelte           # aperçu de la théorie (KaTeX)
+    │   │   ├── Header.svelte           # brand + bascule 3D/2D + impression
+    │   │   ├── StudyTabs.svelte        # études en onglets (multi-études)
+    │   │   ├── ControlPanel.svelte     # géométrie + (en 2D) panneau export
+    │   │   ├── ExportPanel.svelte      # page, calques, cartouche, annotations, PDF/DXF
+    │   │   ├── Viewer3D.svelte         # Three.js annoté : Ø₁/Ø₂, arc φ, PNG 1080p
+    │   │   ├── Studio2D.svelte         # les deux mises à plat empilées
+    │   │   ├── PatternCanvas.svelte    # un développé : calques, tuiles, annotations
+    │   │   ├── StatusBar.svelte        # résumé géométrie + battement moteur
     │   │   ├── PrintLayout.svelte      # rendu impression 1:1
     │   │   ├── Slider.svelte
     │   │   └── Segmented.svelte
     │   └── lib/
     │       ├── api.ts
     │       ├── export.ts               # modèle ExportDocument (miroir TS) + tuilage
-    │       ├── editor.svelte.ts        # état de l'atelier d'export
-    │       ├── store.svelte.ts
+    │       ├── editor.svelte.ts        # façade éditeur sur l'étude active
+    │       ├── store.svelte.ts         # multi-études + persistance + calcul
     │       └── svg.ts
     ├── vite.config.ts
     ├── tsconfig.json

@@ -12,7 +12,7 @@
       subtitle: `Ø ${(r.r1 * 2).toFixed(2)} mm — angle ${((r.phi * 180) / Math.PI).toFixed(2)}°`,
       diameter: r.r1 * 2,
       circumference: r.circumference_main,
-      closed: false,
+      closed: r.dev_main_closed,
     });
   });
 
@@ -26,7 +26,8 @@
       subtitle: `Ø ${d.toFixed(2)} mm — angle ${((r.phi * 180) / Math.PI).toFixed(2)}°`,
       diameter: d,
       circumference: r.circumference_branch ?? r.circumference_main,
-      closed: true,
+      // Open curve: u = 0 and u = 2πR coincide once rolled — no closing chord.
+      closed: false,
     });
   });
 </script>

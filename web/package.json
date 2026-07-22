@@ -1,6 +1,6 @@
 {
-  "name": "cylinders-intersection-web",
-  "version": "0.1.0",
+  "name": "cylix-web",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,6 @@
     "check": "svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
-    "katex": "^0.16.21",
     "three": "0.171.0"
   },
   "devDependencies": {

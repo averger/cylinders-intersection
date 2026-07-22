@@ -5,6 +5,7 @@
   import type { IntersectionPayload } from "../lib/api";
 
   let container = $state<HTMLDivElement | undefined>(undefined);
+  let labelsEl = $state<HTMLDivElement | undefined>(undefined);
 
   let renderer: THREE.WebGLRenderer | null = null;
   let scene: THREE.Scene | null = null;
@@ -14,8 +15,18 @@
   // Scene-managed objects we replace on every recompute:
   let mainGroup: THREE.Group | null = null;
   let branchGroup: THREE.Group | null = null;
-  let curveLine: THREE.Line | null = null;
+  let curveMesh: THREE.Mesh | null = null;
   let planeMesh: THREE.Mesh | null = null;
+  let annotGroup: THREE.Group | null = null;
+
+  // Projected HTML labels (Ø₁, Ø₂, φ…) — DOM managed imperatively for speed.
+  interface Anchor {
+    text: string;
+    pos: THREE.Vector3;
+    color: string;
+    el?: HTMLDivElement;
+  }
+  let anchors: Anchor[] = [];
 
   // Camera target / orbit state (lightweight orbit controls — no extra dep).
   let target = new THREE.Vector3(0, 0, 0);
@@ -49,7 +60,7 @@
     }
     target.set(
       (minX + maxX) / 2,
-      (minZ + maxZ) / 2,   // we map z (math) -> y (three) so this is "vertical" centre
+      (minZ + maxZ) / 2,   // math z -> three y
       -(minY + maxY) / 2,
     );
     const span = Math.max(maxX - minX, maxY - minY, maxZ - minZ, payload.r1 * 2);
@@ -57,118 +68,206 @@
     setCamera();
   }
 
-  function disposeGroup(group: THREE.Group | null) {
-    if (!group) return;
-    group.traverse((obj) => {
-      const o = obj as THREE.Mesh;
-      if (o.geometry) o.geometry.dispose();
-      if (o.material) {
-        if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose());
-        else o.material.dispose();
+  function disposeObject(obj: THREE.Object3D | null) {
+    if (!obj) return;
+    obj.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.geometry) m.geometry.dispose();
+      if (m.material) {
+        if (Array.isArray(m.material)) m.material.forEach((mm) => mm.dispose());
+        else m.material.dispose();
       }
     });
-    group.parent?.remove(group);
+    obj.parent?.remove(obj);
   }
 
-  function buildCylinderMesh(radius: number, height: number, color: number, opacity: number): THREE.Mesh {
-    const geom = new THREE.CylinderGeometry(radius, radius, height, 96, 1, true);
+  function buildCylinderMesh(r: number, height: number, color: number, opacity: number): THREE.Mesh {
+    const geom = new THREE.CylinderGeometry(r, r, height, 128, 1, true);
     const mat = new THREE.MeshStandardMaterial({
       color,
       transparent: true,
       opacity,
-      metalness: 0.25,
-      roughness: 0.32,
+      metalness: 0.35,
+      roughness: 0.28,
       side: THREE.DoubleSide,
+      depthWrite: false,
     });
     return new THREE.Mesh(geom, mat);
   }
 
+  function axisLine(from: THREE.Vector3, to: THREE.Vector3, color: number): THREE.Line {
+    const geom = new THREE.BufferGeometry().setFromPoints([from, to]);
+    const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.45 });
+    return new THREE.Line(geom, mat);
+  }
+
+  function rebuildLabels() {
+    if (!labelsEl) return;
+    labelsEl.innerHTML = "";
+    for (const a of anchors) {
+      const el = document.createElement("div");
+      el.textContent = a.text;
+      el.style.cssText =
+        `position:absolute;transform:translate(-50%,-130%);white-space:nowrap;` +
+        `font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.04em;` +
+        `color:${a.color};background:rgba(6,6,8,0.55);border:1px solid ${a.color}44;` +
+        `padding:2px 7px;border-radius:999px;pointer-events:none;backdrop-filter:blur(6px);`;
+      labelsEl.appendChild(el);
+      a.el = el;
+    }
+  }
+
+  function updateLabels(cam: THREE.Camera) {
+    if (!renderer || !labelsEl) return;
+    const w = renderer.domElement.clientWidth;
+    const h = renderer.domElement.clientHeight;
+    const v = new THREE.Vector3();
+    for (const a of anchors) {
+      if (!a.el) continue;
+      v.copy(a.pos).project(cam);
+      const visible = v.z < 1 && Math.abs(v.x) < 1.2 && Math.abs(v.y) < 1.2;
+      a.el.style.display = visible ? "block" : "none";
+      if (visible) {
+        a.el.style.left = `${((v.x + 1) / 2) * w}px`;
+        a.el.style.top = `${((1 - v.y) / 2) * h}px`;
+      }
+    }
+  }
+
   function rebuildScene(payload: IntersectionPayload) {
     if (!scene) return;
-    disposeGroup(mainGroup); mainGroup = null;
-    disposeGroup(branchGroup); branchGroup = null;
-    if (curveLine) {
-      curveLine.geometry.dispose();
-      (curveLine.material as THREE.Material).dispose();
-      scene.remove(curveLine);
-      curveLine = null;
-    }
-    if (planeMesh) {
-      planeMesh.geometry.dispose();
-      (planeMesh.material as THREE.Material).dispose();
-      scene.remove(planeMesh);
-      planeMesh = null;
-    }
+    disposeObject(mainGroup); mainGroup = null;
+    disposeObject(branchGroup); branchGroup = null;
+    disposeObject(curveMesh); curveMesh = null;
+    disposeObject(planeMesh); planeMesh = null;
+    disposeObject(annotGroup); annotGroup = null;
+    anchors = [];
 
-    // ----- main cylinder (along world +Y in three coordinates) -----
     const r1 = payload.r1;
-    const heightMain = Math.max(payload.r1 * 4, 200);
-    mainGroup = new THREE.Group();
-    const main = buildCylinderMesh(r1, heightMain, 0x88dffa, 0.18);
-    mainGroup.add(main);
+    const heightMain = Math.max(r1 * 4, 200);
+    const phiAngle = payload.phi;
 
-    // wireframe outline rings to keep a "drafting" feeling
-    const ringGeom = new THREE.TorusGeometry(r1, 0.4, 6, 96);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0x88dffa, transparent: true, opacity: 0.4 });
-    for (let i = -1; i <= 1; i++) {
+    // ----- main cylinder (three +Y axis) -----
+    mainGroup = new THREE.Group();
+    const main = buildCylinderMesh(r1, heightMain, 0x88dffa, 0.52);
+    mainGroup.add(main);
+    const ringGeom = new THREE.TorusGeometry(r1, Math.max(0.5, r1 * 0.012), 8, 128);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x88dffa, transparent: true, opacity: 0.6 });
+    for (let i = -1; i <= 1; i += 2) {
       const ring = new THREE.Mesh(ringGeom, ringMat);
       ring.rotation.x = Math.PI / 2;
-      ring.position.y = i * (heightMain / 2 - 0.2);
+      ring.position.y = i * (heightMain / 2);
       mainGroup.add(ring);
     }
-
     scene.add(mainGroup);
 
-    // ----- branch cylinder OR plane -----
+    // ----- annotations group (axes, angle arc) -----
+    annotGroup = new THREE.Group();
+    const axisLen = heightMain * 0.62;
+    annotGroup.add(
+      axisLine(new THREE.Vector3(0, -axisLen, 0), new THREE.Vector3(0, axisLen, 0), 0x88dffa),
+    );
+
+    anchors.push({
+      text: `Ø₁ ${(r1 * 2).toFixed(1)} mm`,
+      pos: new THREE.Vector3(r1 * 0.75, heightMain * 0.42, r1 * 0.6),
+      color: "#88dffa",
+    });
+
+    // Tilted axis direction in three coords: rotate +Y by −φ around X.
+    const branchDir = new THREE.Vector3(0, 1, 0).applyEuler(new THREE.Euler(-phiAngle, 0, 0));
+
     if (payload.mode === "cyl_cyl" && payload.r2 != null) {
       const r2 = payload.r2;
-      const heightBranch = Math.max(payload.r2 * 6, 240);
+      const heightBranch = Math.max(r2 * 6, 240);
       branchGroup = new THREE.Group();
-      const branch = buildCylinderMesh(r2, heightBranch, 0xff7a3a, 0.22);
-      branchGroup.add(branch);
-
-      // Tilt around X by phi: in math, +z (axis) becomes (0, sinφ, cosφ).
-      // Three uses Y-up; our math z maps to three's Y. So rotation is around
-      // three's X axis as well.
-      branchGroup.rotation.x = -payload.phi;
+      branchGroup.add(buildCylinderMesh(r2, heightBranch, 0xff7a3a, 0.55));
+      branchGroup.rotation.x = -phiAngle;
       scene.add(branchGroup);
+
+      annotGroup.add(
+        axisLine(
+          branchDir.clone().multiplyScalar(-heightBranch * 0.62),
+          branchDir.clone().multiplyScalar(heightBranch * 0.62),
+          0xff7a3a,
+        ),
+      );
+      anchors.push({
+        text: `Ø₂ ${(r2 * 2).toFixed(1)} mm`,
+        pos: new THREE.Vector3(0, heightBranch * 0.4, r2 * 1.05).applyEuler(
+          new THREE.Euler(-phiAngle, 0, 0),
+        ),
+        color: "#ffb28a",
+      });
     } else if (payload.mode === "cyl_plane") {
-      const size = Math.max(payload.r1 * 6, 360);
+      const size = Math.max(r1 * 6, 360);
       const planeGeom = new THREE.PlaneGeometry(size, size);
       const planeMat = new THREE.MeshStandardMaterial({
         color: 0xff7a3a,
         transparent: true,
-        opacity: 0.25,
+        opacity: 0.4,
         side: THREE.DoubleSide,
-        metalness: 0.1,
-        roughness: 0.6,
+        metalness: 0.15,
+        roughness: 0.5,
+        depthWrite: false,
       });
       planeMesh = new THREE.Mesh(planeGeom, planeMat);
-      // Plane equation in math coords: z = z0 − y·tan(phi).  In math the
-      // normal is (0, sin φ, cos φ); after the (mx, my, mz) → (mx, mz, −my)
-      // mapping, the three-space normal is (0, cos φ, −sin φ).  A
-      // PlaneGeometry has its default normal at +Z; the rotation around
-      // three.X that maps (0, 0, 1) → (0, cos φ, −sin φ) is α = −π/2 − φ.
-      planeMesh.rotation.x = -Math.PI / 2 - payload.phi;
+      // three-space plane normal: (0, cosφ, −sinφ) — rotation −π/2 − φ on X.
+      planeMesh.rotation.x = -Math.PI / 2 - phiAngle;
       planeMesh.position.y = store.params.z0;
       scene.add(planeMesh);
+      planeMesh.updateMatrixWorld();
+      anchors.push({
+        text: `plan · φ ${((phiAngle * 180) / Math.PI).toFixed(1)}°`,
+        pos: planeMesh.localToWorld(new THREE.Vector3(size * 0.28, size * 0.22, 0)),
+        color: "#ffb28a",
+      });
     }
 
-    // ----- intersection curve -----
-    const positions = new Float32Array(payload.curve3d.length * 3);
-    for (let i = 0; i < payload.curve3d.length; i++) {
-      const p = payload.curve3d[i];
-      // math (x, y, z) -> three (x, z, -y)
-      positions[i * 3 + 0] = p.x;
-      positions[i * 3 + 1] = p.z;
-      positions[i * 3 + 2] = -p.y;
+    // ----- angle arc between the two axes (plane x = 0) -----
+    if (Math.abs(phiAngle) > 1e-3) {
+      const rArc = Math.max(r1 * 1.9, (payload.r2 ?? 0) * 1.9, 55);
+      const arcPts: THREE.Vector3[] = [];
+      const steps = 48;
+      for (let i = 0; i <= steps; i++) {
+        const s = (phiAngle * i) / steps;
+        arcPts.push(new THREE.Vector3(0, Math.cos(s) * rArc, -Math.sin(s) * rArc));
+      }
+      const arcGeom = new THREE.BufferGeometry().setFromPoints(arcPts);
+      const arc = new THREE.Line(
+        arcGeom,
+        new THREE.LineBasicMaterial({ color: 0xf5f5f7, transparent: true, opacity: 0.8 }),
+      );
+      annotGroup.add(arc);
+      const mid = phiAngle / 2;
+      anchors.push({
+        text: `φ = ${((phiAngle * 180) / Math.PI).toFixed(1)}°`,
+        pos: new THREE.Vector3(0, Math.cos(mid) * rArc * 1.18, -Math.sin(mid) * rArc * 1.18),
+        color: "#f5f5f7",
+      });
     }
-    const curveGeom = new THREE.BufferGeometry();
-    curveGeom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    const curveMat = new THREE.LineBasicMaterial({ color: 0xff5b1a, linewidth: 2 });
-    curveLine = payload.curve3d.length > 1 ? new THREE.LineLoop(curveGeom, curveMat) : new THREE.Line(curveGeom, curveMat);
-    scene.add(curveLine);
+    scene.add(annotGroup);
 
+    // ----- intersection curve as a fat tube -----
+    if (payload.curve3d.length > 2) {
+      const pts = payload.curve3d.map((p) => new THREE.Vector3(p.x, p.z, -p.y));
+      const isLoop = payload.mode === "cyl_plane" || (payload.dev_main_closed ?? false) ||
+        pts[0].distanceTo(pts[pts.length - 1]) < r1 * 0.05;
+      const curve = new THREE.CatmullRomCurve3(pts, isLoop);
+      const tubeR = Math.max(0.6, Math.max(r1, payload.r2 ?? 0) * 0.014);
+      const tubeGeom = new THREE.TubeGeometry(curve, Math.min(720, pts.length), tubeR, 10, isLoop);
+      const tubeMat = new THREE.MeshStandardMaterial({
+        color: 0xff5b1a,
+        emissive: 0xff3c00,
+        emissiveIntensity: 0.55,
+        metalness: 0.1,
+        roughness: 0.35,
+      });
+      curveMesh = new THREE.Mesh(tubeGeom, tubeMat);
+      scene.add(curveMesh);
+    }
+
+    rebuildLabels();
     fitToScene(payload);
   }
 
@@ -177,18 +276,20 @@
       theta += 0.0022;
       setCamera();
     }
-    if (renderer && scene && camera) renderer.render(scene, camera);
+    if (renderer && scene && camera) {
+      renderer.render(scene, camera);
+      updateLabels(camera);
+    }
     raf = requestAnimationFrame(tick);
   }
 
-  /// Render one Full HD frame off-screen and download it as PNG — ready for
-  /// social media (1920×1080, transparent UI removed, deep-space backdrop).
+  /// Render one Full HD frame off-screen (labels composited on a 2D canvas)
+  /// and download it as PNG — 1920×1080, ready for social media.
   function capturePNG() {
     if (!scene || !camera || capturing) return;
     capturing = true;
     try {
-      const W = 1920,
-        H = 1080;
+      const W = 1920, H = 1080;
       const shotRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
       shotRenderer.setPixelRatio(1);
       shotRenderer.setSize(W, H, false);
@@ -198,11 +299,35 @@
       shotCamera.aspect = W / H;
       shotCamera.updateProjectionMatrix();
       shotRenderer.render(scene, shotCamera);
-      const url = shotRenderer.domElement.toDataURL("image/png");
+
+      const out = document.createElement("canvas");
+      out.width = W;
+      out.height = H;
+      const ctx = out.getContext("2d")!;
+      ctx.drawImage(shotRenderer.domElement, 0, 0);
       shotRenderer.dispose();
+
+      // Composite the annotation labels at their projected positions.
+      const v = new THREE.Vector3();
+      ctx.font = "500 24px 'JetBrains Mono', monospace";
+      ctx.textBaseline = "middle";
+      for (const a of anchors) {
+        v.copy(a.pos).project(shotCamera);
+        if (v.z >= 1 || Math.abs(v.x) > 1.1 || Math.abs(v.y) > 1.1) continue;
+        const x = ((v.x + 1) / 2) * W;
+        const y = ((1 - v.y) / 2) * H;
+        const tw = ctx.measureText(a.text).width;
+        ctx.fillStyle = "rgba(6,6,8,0.6)";
+        ctx.beginPath();
+        ctx.roundRect(x - tw / 2 - 12, y - 38, tw + 24, 34, 17);
+        ctx.fill();
+        ctx.fillStyle = a.color;
+        ctx.fillText(a.text, x - tw / 2, y - 21);
+      }
+
       const a = document.createElement("a");
-      a.href = url;
-      a.download = "intersection-3d-1920x1080.png";
+      a.href = out.toDataURL("image/png");
+      a.download = "cylix-3d-1920x1080.png";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -226,12 +351,12 @@
     container.appendChild(renderer.domElement);
 
     // lights
-    const hemi = new THREE.HemisphereLight(0xb8d8ff, 0x0a0a0b, 0.45);
+    const hemi = new THREE.HemisphereLight(0xb8d8ff, 0x0a0a0b, 0.5);
     scene.add(hemi);
-    const key = new THREE.DirectionalLight(0xffffff, 1.1);
+    const key = new THREE.DirectionalLight(0xffffff, 1.2);
     key.position.set(2, 4, 3);
     scene.add(key);
-    const rim = new THREE.DirectionalLight(0xff8a50, 0.6);
+    const rim = new THREE.DirectionalLight(0xff8a50, 0.7);
     rim.position.set(-3, 2, -4);
     scene.add(rim);
 
@@ -275,10 +400,8 @@
     });
     el.addEventListener("pointermove", (e: PointerEvent) => {
       if (!dragging) return;
-      const dx = e.clientX - lastX;
-      const dy = e.clientY - lastY;
-      theta -= dx * 0.008;
-      phi -= dy * 0.008;
+      theta -= (e.clientX - lastX) * 0.008;
+      phi -= (e.clientY - lastY) * 0.008;
       phi = Math.max(0.05, Math.min(Math.PI - 0.05, phi));
       lastX = e.clientX;
       lastY = e.clientY;
@@ -288,8 +411,7 @@
       "wheel",
       (e: WheelEvent) => {
         e.preventDefault();
-        const factor = Math.exp(e.deltaY * 0.0015);
-        radius = Math.max(40, Math.min(4000, radius * factor));
+        radius = Math.max(40, Math.min(4000, radius * Math.exp(e.deltaY * 0.0015)));
         setCamera();
       },
       { passive: false },
@@ -297,13 +419,15 @@
 
     raf = requestAnimationFrame(tick);
 
-    // Re-render whenever the result changes
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
       if (renderer) renderer.dispose();
-      disposeGroup(mainGroup);
-      disposeGroup(branchGroup);
+      disposeObject(mainGroup);
+      disposeObject(branchGroup);
+      disposeObject(curveMesh);
+      disposeObject(planeMesh);
+      disposeObject(annotGroup);
     };
   });
 
@@ -314,20 +438,9 @@
   });
 </script>
 
-<div class="relative w-full h-full">
+<div class="absolute inset-0">
   <div bind:this={container} class="w-full h-full"></div>
-
-  <!-- HUD overlay -->
-  <div class="absolute inset-x-0 top-0 p-4 flex items-start justify-between pointer-events-none">
-    <div class="pill pointer-events-auto">vue 3D</div>
-    <div class="text-right text-[11px] text-ash/80 num leading-tight">
-      {#if store.result}
-        Ø₁ {store.result.r1 * 2} mm{#if store.result.r2}
-          · Ø₂ {store.result.r2 * 2} mm{/if}<br />
-        φ = {((store.result.phi * 180) / Math.PI).toFixed(2)}°
-      {/if}
-    </div>
-  </div>
+  <div bind:this={labelsEl} class="absolute inset-0 overflow-hidden pointer-events-none"></div>
 
   <!-- Bottom toolbar -->
   <div class="absolute left-4 bottom-4 flex items-center gap-2">

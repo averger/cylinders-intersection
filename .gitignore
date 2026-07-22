@@ -9,3 +9,4 @@ web/.svelte-kit/
 
 .DS_Store
 *.log
+__pycache__/

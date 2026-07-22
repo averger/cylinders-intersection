@@ -1,8 +1,8 @@
 [package]
-name = "cylinders-intersection"
-version = "0.1.0"
+name = "cylix"
+version = "0.2.0"
 edition = "2021"
-description = "Compute the developed (gueule de loup) patterns from cylinder-cylinder and cylinder-plane intersections, exposed via an Axum HTTP API."
+description = "Cylix — exact cylinder-intersection cut templates (gueule de loup) developed at scale 1:1, exposed via an Axum HTTP API with vector PDF/DXF export."
 license = "MIT"
 
 [dependencies]

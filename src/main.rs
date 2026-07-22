@@ -2,12 +2,12 @@ use std::net::SocketAddr;
 
 use anyhow::Context;
 use clap::Parser;
-use cylinders_intersection::api::router;
+use cylix::api::router;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 #[derive(Parser, Debug)]
-#[command(author, version, about = "HTTP server for cylinder-intersection developed patterns")]
+#[command(author, version, about = "Cylix — cylinder-intersection cut templates at scale 1:1")]
 struct Cli {
     /// Address to bind on.
     #[arg(long, default_value = "127.0.0.1")]
