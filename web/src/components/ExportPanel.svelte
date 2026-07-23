@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Annotations + export actions — shown in the sidebar when the 2D
-  // workspace is active. Layout options live in the header Options menu.
+  // Annotations — shown in the sidebar when the 2D workspace is active.
+  // Layout options live in the header Options menu, exports in Exporter.
   import { store } from "../lib/store.svelte";
   import { editor } from "../lib/editor.svelte";
 </script>
@@ -48,29 +48,7 @@
     {/if}
   </section>
 
-  <section class="pt-3 hl-t space-y-2">
-    <div class="flex gap-2">
-      <button
-        class="btn-primary flex-1 !py-2.5 text-sm"
-        disabled={editor.busy !== null || !store.result}
-        onclick={() => editor.exportPdf()}
-      >
-        {editor.busy === "pdf" ? "génération…" : "PDF 1:1"}
-      </button>
-      <button
-        class="btn-ghost flex-1 justify-center !py-2.5 text-sm"
-        disabled={editor.busy !== null || !store.result}
-        onclick={() => editor.exportDxf()}
-      >
-        {editor.busy === "dxf" ? "génération…" : "DXF"}
-      </button>
-    </div>
-    {#if editor.error}
-      <p class="text-[12px] text-ember">{editor.error}</p>
-    {/if}
-    <p class="text-[10px] text-ash/70 leading-relaxed">
-      Le PDF contient toutes les mises à plat ({editor.available.length}) avec cartouche et
-      règle de contrôle. DXF R12 en mm — calques CUT / FRAME / AXIS / TEXT / ANNOT.
-    </p>
-  </section>
+  {#if editor.error}
+    <p class="text-[12px] text-ember">{editor.error}</p>
+  {/if}
 </div>
