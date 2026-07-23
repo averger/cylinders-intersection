@@ -84,7 +84,7 @@
       <div class="relative" use:clickOutside>
         <button
           class="btn-primary !py-2 text-sm"
-          disabled={editor.busy !== null || !store.result}
+          disabled={editor.busy !== null || !store.hasResult}
           onclick={() => (exportMenu = !exportMenu)}
           aria-haspopup="menu"
           aria-expanded={exportMenu}

@@ -52,6 +52,48 @@ export interface CylPlaneInput {
   n_samples?: number;
 }
 
+/** One branch of a multi-branch node ("châssis"). Radians / mm. */
+export interface MultiBranchSpec {
+  r: number;
+  z: number;
+  phi: number;
+  psi: number;
+}
+
+export interface MultiInput {
+  r1: number;
+  branches: MultiBranchSpec[];
+  n_samples?: number;
+}
+
+export interface MultiBranchResult {
+  r: number;
+  z: number;
+  phi: number;
+  psi: number;
+  dev: DevPoint[];
+  curve3d: Point3[];
+  bbox: BBox2 | null;
+  circumference: number;
+  cut_by_neighbor: boolean;
+}
+
+export interface HoleResult {
+  branch: number;
+  pts: DevPoint[];
+  closed: boolean;
+  bbox: BBox2 | null;
+}
+
+export interface MultiPayload {
+  mode: "multi";
+  r1: number;
+  circumference_main: number;
+  branches: MultiBranchResult[];
+  holes: HoleResult[];
+  warnings: string[];
+}
+
 async function postJSON<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(path, {
     method: "POST",
@@ -76,4 +118,5 @@ export const api = {
     postJSON<IntersectionPayload>("/api/intersect/cyl-cyl", input),
   cylPlane: (input: CylPlaneInput) =>
     postJSON<IntersectionPayload>("/api/intersect/cyl-plane", input),
+  multi: (input: MultiInput) => postJSON<MultiPayload>("/api/intersect/multi", input),
 };

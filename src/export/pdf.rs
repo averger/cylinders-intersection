@@ -331,6 +331,9 @@ fn draw_model(cs: &mut Cs, doc: &ExportDocument, sheet: &Sheet) {
         super::PatternKind::Main => cs.stroke_rgb(0.03, 0.45, 0.62),
     }
     cs.polyline(&sheet.cut, sheet.closed);
+    for (pts, closed) in &sheet.holes {
+        cs.polyline(pts, *closed);
+    }
     cs.restore();
 
     // Annotations.

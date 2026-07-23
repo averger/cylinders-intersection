@@ -2,7 +2,7 @@
   import * as THREE from "three";
   import { onMount } from "svelte";
   import { store } from "../lib/store.svelte";
-  import type { IntersectionPayload } from "../lib/api";
+  import type { DevPoint, IntersectionPayload, MultiPayload } from "../lib/api";
 
   let container = $state<HTMLDivElement | undefined>(undefined);
   let labelsEl = $state<HTMLDivElement | undefined>(undefined);
@@ -847,6 +847,266 @@
     fitToScene(payload);
   }
 
+  // ---------------------------------------------------------------------
+  // Multi-branch node ("châssis") — N tubes landing on the main one, each
+  // trimmed at its first contact (main tube or neighbouring branch).
+  // ---------------------------------------------------------------------
+
+  /** math (x, y, z) → three (x, z, −y). */
+  function m2t(x: number, y: number, z: number): THREE.Vector3 {
+    return new THREE.Vector3(x, z, -y);
+  }
+
+  interface BranchFrameT {
+    c: THREE.Vector3; // math coords throughout
+    d: THREE.Vector3;
+    u: THREE.Vector3;
+    w: THREE.Vector3;
+    r: number;
+  }
+
+  /** Frame of a branch: columns of Rz(ψ)·Rx(φ), matching the engine. */
+  function branchFrame(b: { r: number; z: number; phi: number; psi: number }): BranchFrameT {
+    const cphi = Math.cos(b.phi), sphi = Math.sin(b.phi);
+    const cpsi = Math.cos(b.psi), spsi = Math.sin(b.psi);
+    return {
+      c: new THREE.Vector3(0, 0, b.z),
+      u: new THREE.Vector3(cpsi, spsi, 0),
+      w: new THREE.Vector3(-spsi * cphi, cpsi * cphi, sphi),
+      d: new THREE.Vector3(spsi * sphi, -cpsi * sphi, cphi),
+      r: b.r,
+    };
+  }
+
+  /** Branch tube from its developed cut: generators run t_cut(θ) → far end. */
+  function buildBranchTube(
+    fr: BranchFrameT,
+    dev: DevPoint[],
+  ): { geom: THREE.BufferGeometry; rim: THREE.Vector3[]; endCenter: THREE.Vector3 } | null {
+    if (dev.length < 3) return null;
+    let tHi = -Infinity;
+    for (const s of dev) tHi = Math.max(tHi, s.v);
+    const tEnd = tHi + Math.max(3 * fr.r, 90);
+
+    const P = (th: number, t: number) => {
+      const ct = Math.cos(th), st = Math.sin(th);
+      return m2t(
+        fr.c.x + fr.r * (ct * fr.u.x + st * fr.w.x) + t * fr.d.x,
+        fr.c.y + fr.r * (ct * fr.u.y + st * fr.w.y) + t * fr.d.y,
+        fr.c.z + fr.r * (ct * fr.u.z + st * fr.w.z) + t * fr.d.z,
+      );
+    };
+    const N = (th: number) => {
+      const ct = Math.cos(th), st = Math.sin(th);
+      return m2t(
+        ct * fr.u.x + st * fr.w.x,
+        ct * fr.u.y + st * fr.w.y,
+        ct * fr.u.z + st * fr.w.z,
+      );
+    };
+
+    const stride = Math.max(1, Math.floor(dev.length / 420));
+    const cols: { th: number; t: number }[] = [];
+    for (let i = 0; i < dev.length; i += stride) cols.push({ th: dev[i].theta, t: dev[i].v });
+
+    const positions: number[] = [], normals: number[] = [], indices: number[] = [];
+    for (const c of cols) {
+      const a = P(c.th, c.t), b = P(c.th, tEnd), n = N(c.th);
+      positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+      normals.push(n.x, n.y, n.z, n.x, n.y, n.z);
+    }
+    const meanStep = (2 * Math.PI) / cols.length;
+    const quad = (i: number, j: number) =>
+      indices.push(2 * i, 2 * j, 2 * i + 1, 2 * j, 2 * j + 1, 2 * i + 1);
+    for (let i = 0; i + 1 < cols.length; i++) {
+      if (Math.abs(cols[i + 1].th - cols[i].th) < 4 * meanStep) quad(i, i + 1);
+    }
+    if (cols[0].th + 2 * Math.PI - cols[cols.length - 1].th < 4 * meanStep) quad(cols.length - 1, 0);
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geom.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
+    geom.setIndex(indices);
+
+    const rim: THREE.Vector3[] = [];
+    for (let i = 0; i <= 72; i++) rim.push(P((2 * Math.PI * i) / 72, tEnd));
+    const endCenter = P(0, tEnd).add(P(Math.PI, tEnd)).multiplyScalar(0.5);
+    return { geom, rim, endCenter };
+  }
+
+  /**
+   * Main tube wall between `zLo` and `zHi`, minus every branch opening.
+   * Per α-column the wall is the complement of the hole intervals crossed
+   * by the developed loops (u periodic).
+   */
+  function buildHoledMainMulti(m: MultiPayload, zLo: number, zHi: number): THREE.BufferGeometry {
+    const r1 = m.r1;
+    const circ = m.circumference_main;
+    const loops = m.holes.map((h) => h.pts);
+
+    const spansAt = (u0: number): [number, number][] => {
+      const holesHere: [number, number][] = [];
+      for (const loop of loops) {
+        for (let k = -2; k <= 2; k++) {
+          const u = u0 + k * circ;
+          const vs: number[] = [];
+          for (let i = 0; i < loop.length; i++) {
+            const a = loop[i];
+            const b = loop[(i + 1) % loop.length];
+            if ((a.u - u) * (b.u - u) < 0) {
+              const s = (u - a.u) / (b.u - a.u);
+              vs.push(a.v + s * (b.v - a.v));
+            }
+          }
+          if (vs.length >= 2) {
+            holesHere.push([Math.min(...vs), Math.max(...vs)]);
+            break;
+          }
+        }
+      }
+      holesHere.sort((x, y) => x[0] - y[0]);
+      const spans: [number, number][] = [];
+      let lo = zLo;
+      for (const [hLo, hHi] of holesHere) {
+        if (hLo > lo) spans.push([lo, hLo]);
+        lo = Math.max(lo, hHi);
+      }
+      if (lo < zHi) spans.push([lo, zHi]);
+      return spans;
+    };
+
+    const positions: number[] = [], normals: number[] = [], indices: number[] = [];
+    let vi = 0;
+    const push = (alpha: number, z: number) => {
+      positions.push(r1 * Math.cos(alpha), z, -r1 * Math.sin(alpha));
+      normals.push(Math.cos(alpha), 0, -Math.sin(alpha));
+      return vi++;
+    };
+    const quadZ = (
+      aA: number, bA: number,
+      zaLo: number, zaHi: number, zbLo: number, zbHi: number,
+    ) => {
+      const p0 = push(aA, zaLo), p1 = push(aA, zaHi), p2 = push(bA, zbLo), p3 = push(bA, zbHi);
+      indices.push(p0, p2, p1, p2, p3, p1);
+    };
+
+    const nA = 721;
+    let prevA = 0;
+    let prevSpans = spansAt(0);
+    for (let i = 1; i < nA; i++) {
+      const alpha = (2 * Math.PI * i) / (nA - 1);
+      const spans = spansAt(r1 * alpha);
+      if (spans.length === prevSpans.length) {
+        for (let k = 0; k < spans.length; k++) {
+          quadZ(prevA, alpha, prevSpans[k][0], prevSpans[k][1], spans[k][0], spans[k][1]);
+        }
+      } else {
+        // A hole opens or closes inside this hair-thin column: draw the
+        // denser side on both edges (the seam is a fraction of a degree).
+        const dominant = spans.length > prevSpans.length ? spans : prevSpans;
+        for (const [lo, hi] of dominant) quadZ(prevA, alpha, lo, hi, lo, hi);
+      }
+      prevA = alpha;
+      prevSpans = spans;
+    }
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geom.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
+    geom.setIndex(indices);
+    return geom;
+  }
+
+  function rebuildSceneMulti(m: MultiPayload) {
+    if (!scene) return;
+    const pal = palette();
+    disposeObject(solidsGroup); solidsGroup = null;
+    disposeObject(annotGroup); annotGroup = null;
+    anchors = [];
+    solidsGroup = new THREE.Group();
+    annotGroup = new THREE.Group();
+
+    const r1 = m.r1;
+    let vLo = 0, vHi = 0;
+    for (const h of m.holes) {
+      if (h.bbox) {
+        vLo = Math.min(vLo, h.bbox.v_min);
+        vHi = Math.max(vHi, h.bbox.v_max);
+      }
+    }
+    const pad = Math.max(1.6 * r1, 70);
+    const zLo = vLo - pad, zHi = vHi + pad;
+
+    solidsGroup.add(new THREE.Mesh(buildHoledMainMulti(m, zLo, zHi), solidMaterial(pal.main)));
+    const rt = Math.max(0.5, r1 * 0.012);
+    for (const zEnd of [zLo, zHi]) {
+      const rg = ring(r1, rt, pal.mainRing);
+      rg.rotation.x = Math.PI / 2;
+      rg.position.y = zEnd;
+      solidsGroup.add(rg);
+    }
+    annotGroup.add(
+      axisLine(new THREE.Vector3(0, zLo - 20, 0), new THREE.Vector3(0, zHi + 20, 0), pal.axisMain),
+    );
+    anchors.push({
+      text: `Ø₁ ${(r1 * 2).toFixed(1)} mm`,
+      pos: new THREE.Vector3(0, zLo, 0),
+      color: "var(--cyan)",
+      dy: 42,
+    });
+
+    const curveMat = () =>
+      new THREE.MeshStandardMaterial({
+        color: pal.curve,
+        emissive: pal.curveEmissive,
+        emissiveIntensity: 0.5,
+        metalness: 0.1,
+        roughness: 0.35,
+      });
+
+    m.branches.forEach((b, i) => {
+      const fr = branchFrame(b);
+      const built = buildBranchTube(fr, b.dev);
+      if (!built) return;
+      solidsGroup!.add(new THREE.Mesh(built.geom, solidMaterial(pal.branch)));
+      solidsGroup!.add(
+        new THREE.LineLoop(
+          new THREE.BufferGeometry().setFromPoints(built.rim),
+          new THREE.LineBasicMaterial({ color: pal.branch, transparent: true, opacity: 0.9 }),
+        ),
+      );
+      anchors.push({
+        text: `P${i + 1} · Ø ${(b.r * 2).toFixed(0)} · φ ${((b.phi * 180) / Math.PI).toFixed(0)}°`,
+        pos: built.endCenter,
+        color: "var(--ember)",
+        dy: -44,
+      });
+      // The cut rim — same emissive accent as the classic modes.
+      if (b.curve3d.length > 2) {
+        const pts = b.curve3d.map((p) => new THREE.Vector3(p.x, p.z, -p.y));
+        const curve = new THREE.CatmullRomCurve3(pts, true);
+        const tubeGeom = new THREE.TubeGeometry(
+          curve,
+          Math.min(720, pts.length),
+          Math.max(0.6, r1 * 0.012),
+          10,
+          true,
+        );
+        solidsGroup!.add(new THREE.Mesh(tubeGeom, curveMat()));
+      }
+    });
+
+    scene.add(solidsGroup);
+    scene.add(annotGroup);
+    rebuildLabels();
+
+    const box = new THREE.Box3().setFromObject(solidsGroup);
+    const size = box.getSize(new THREE.Vector3());
+    target.copy(box.getCenter(new THREE.Vector3()));
+    radius = Math.max(300, size.length() * 1.05);
+    setCamera();
+  }
+
   function applySceneTheme() {
     if (!scene) return;
     const pal = palette();
@@ -1035,10 +1295,17 @@
   });
 
   $effect(() => {
-    if (!scene || !store.result) return;
+    if (!scene) return;
     void store.theme; // rebuild materials & grid when the theme flips
-    applySceneTheme();
-    rebuildScene(store.result);
+    if (store.params.mode === "multi") {
+      if (!store.multiResult) return;
+      applySceneTheme();
+      rebuildSceneMulti(store.multiResult);
+    } else {
+      if (!store.result) return;
+      applySceneTheme();
+      rebuildScene(store.result);
+    }
   });
 </script>
 

@@ -14,20 +14,24 @@ pub use pdf::render_pdf;
 use serde::Deserialize;
 
 use crate::intersection::{cyl_cyl, cyl_plane, CylCylInput, CylPlaneInput, IntersectionPayload};
+use crate::multi::MultiInput;
 
-/// Which geometry feeds the document.  Mirrors the two compute endpoints.
-#[derive(Debug, Clone, Copy, Deserialize)]
+/// Which geometry feeds the document.  Mirrors the compute endpoints.
+#[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "mode", rename_all = "snake_case")]
 pub enum SourceSpec {
     CylCyl(CylCylInput),
     CylPlane(CylPlaneInput),
+    Multi(MultiInput),
 }
 
 impl SourceSpec {
-    pub fn compute(&self) -> IntersectionPayload {
-        match *self {
-            SourceSpec::CylCyl(input) => cyl_cyl(input),
-            SourceSpec::CylPlane(input) => cyl_plane(input),
+    /// Single-pattern payload — only for the two historical modes.
+    fn compute_single(&self) -> Option<IntersectionPayload> {
+        match self {
+            SourceSpec::CylCyl(input) => Some(cyl_cyl(*input)),
+            SourceSpec::CylPlane(input) => Some(cyl_plane(*input)),
+            SourceSpec::Multi(_) => None,
         }
     }
 }
@@ -190,6 +194,9 @@ pub struct Sheet {
     /// page is wasted on the empty part of the unwrapped frame.
     pub cut_bbox: (f64, f64, f64, f64),
     pub annotations: Vec<Annotation>,
+    /// Additional cut loops on the same sheet (multi-branch nodes: every
+    /// extra opening of the main tube).  Rendered with the cut pen.
+    pub holes: Vec<(Vec<(f64, f64)>, bool)>,
 }
 
 impl Sheet {
@@ -200,6 +207,7 @@ impl Sheet {
         let (lo_v, hi_v) = (v0 - margin, v0 + h + margin);
         let inside = |u: f64, v: f64| u >= lo_u && u <= hi_u && v >= lo_v && v <= hi_v;
         self.cut.iter().any(|&(u, v)| inside(u, v))
+            || self.holes.iter().any(|(pts, _)| pts.iter().any(|&(u, v)| inside(u, v)))
             || self.annotations.iter().any(|a| inside(a.u, a.v))
     }
 
@@ -224,24 +232,31 @@ impl Sheet {
         out
     }
 
-    /// `v` values where the cut polyline crosses the vertical line `u = g` —
+    /// `v` values where the cut polylines cross the vertical line `u = g` —
     /// the alignment tick positions on a generatrix.
     pub fn curve_crossings(&self, g: f64) -> Vec<f64> {
         let mut out = Vec::new();
-        let n = self.cut.len();
-        if n < 2 {
-            return out;
-        }
-        let last = if self.closed { n } else { n - 1 };
-        for i in 0..last {
-            let (ua, va) = self.cut[i];
-            let (ub, vb) = self.cut[(i + 1) % n];
-            if (ua - g) * (ub - g) < 0.0 {
-                let s = (g - ua) / (ub - ua);
-                out.push(va + s * (vb - va));
-            }
+        crossings_of(&self.cut, self.closed, g, &mut out);
+        for (pts, closed) in &self.holes {
+            crossings_of(pts, *closed, g, &mut out);
         }
         out
+    }
+}
+
+fn crossings_of(pts: &[(f64, f64)], closed: bool, g: f64, out: &mut Vec<f64>) {
+    let n = pts.len();
+    if n < 2 {
+        return;
+    }
+    let last = if closed { n } else { n - 1 };
+    for i in 0..last {
+        let (ua, va) = pts[i];
+        let (ub, vb) = pts[(i + 1) % n];
+        if (ua - g) * (ub - g) < 0.0 {
+            let s = (g - ua) / (ub - ua);
+            out.push(va + s * (vb - va));
+        }
     }
 }
 
@@ -258,13 +273,16 @@ pub enum ExportError {
 
 /// Compute the geometry and lay out every requested pattern.
 pub fn build_sheets(doc: &ExportDocument) -> Result<Vec<Sheet>, ExportError> {
-    if doc.patterns.is_empty() {
-        return Err(ExportError::Invalid("aucun motif sélectionné".into()));
-    }
     if !(doc.cut_width_mm > 0.0 && doc.cut_width_mm <= 5.0) {
         return Err(ExportError::Invalid("largeur de trait hors limites".into()));
     }
-    let payload = doc.source.compute();
+    if let SourceSpec::Multi(input) = &doc.source {
+        return build_multi_sheets(doc, input);
+    }
+    if doc.patterns.is_empty() {
+        return Err(ExportError::Invalid("aucun motif sélectionné".into()));
+    }
+    let payload = doc.source.compute_single().expect("single-pattern mode");
     if payload.dev_branch.is_empty() {
         return Err(ExportError::EmptyPattern);
     }
@@ -273,6 +291,118 @@ pub fn build_sheets(doc: &ExportDocument) -> Result<Vec<Sheet>, ExportError> {
     for &kind in &doc.patterns {
         sheets.push(layout_sheet(doc, &payload, kind)?);
     }
+    Ok(sheets)
+}
+
+/// Sheets of a multi-branch node: the main tube with every opening in
+/// place, then one template per branch (mutual seams included).
+fn build_multi_sheets(doc: &ExportDocument, input: &MultiInput) -> Result<Vec<Sheet>, ExportError> {
+    let payload = crate::multi::multi(input);
+    if payload.holes.is_empty() {
+        return Err(ExportError::EmptyPattern);
+    }
+    let mut sheets = Vec::with_capacity(1 + payload.branches.len());
+
+    // --- Main tube: one sheet, all openings. -----------------------------
+    let circ = payload.circumference_main;
+    let mut loops: Vec<(Vec<(f64, f64)>, bool)> = payload
+        .holes
+        .iter()
+        .map(|h| (h.pts.iter().map(|p| (p.u, p.v)).collect::<Vec<_>>(), h.closed))
+        .collect();
+    let (mut u_min, mut u_max, mut v_min, mut v_max) =
+        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for (pts, _) in &loops {
+        for &(u, v) in pts {
+            u_min = u_min.min(u);
+            u_max = u_max.max(u);
+            v_min = v_min.min(v);
+            v_max = v_max.max(v);
+        }
+    }
+    let (cut, closed) = loops.remove(0);
+    let center = (u_min + u_max) / 2.0;
+    let frame_start = (center / circ).floor() * circ;
+    let annotations: Vec<Annotation> = doc
+        .annotations
+        .iter()
+        .filter(|a| a.pattern == PatternKind::Main)
+        .cloned()
+        .collect();
+    let mut cut_bbox = (u_min, v_min, u_max, v_max);
+    for a in &annotations {
+        cut_bbox.0 = cut_bbox.0.min(a.u);
+        cut_bbox.1 = cut_bbox.1.min(a.v);
+        cut_bbox.2 = cut_bbox.2.max(a.u);
+        cut_bbox.3 = cut_bbox.3.max(a.v);
+    }
+    sheets.push(Sheet {
+        kind: PatternKind::Main,
+        name: "Tube principal — lumières de piquages".to_string(),
+        meta: format!(
+            "Ø {:.1} mm — {} lumière(s) — périmètre {:.1} mm",
+            payload.r1 * 2.0,
+            payload.holes.len(),
+            circ
+        ),
+        cut,
+        closed,
+        frame: (frame_start, v_min, circ, (v_max - v_min).max(0.1)),
+        axis_u: 0.0,
+        circumference: circ,
+        bbox: (
+            u_min.min(frame_start),
+            v_min,
+            u_max.max(frame_start + circ),
+            v_max,
+        ),
+        cut_bbox,
+        annotations,
+        holes: loops,
+    });
+
+    // --- One template per branch. ----------------------------------------
+    for (i, br) in payload.branches.iter().enumerate() {
+        if br.dev.is_empty() {
+            continue;
+        }
+        let cut: Vec<(f64, f64)> = br.dev.iter().map(|p| (p.u, p.v)).collect();
+        let (mut u0, mut u1, mut v0, mut v1) =
+            (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+        for &(u, v) in &cut {
+            u0 = u0.min(u);
+            u1 = u1.max(u);
+            v0 = v0.min(v);
+            v1 = v1.max(v);
+        }
+        let circb = br.circumference;
+        let fstart = ((u0 + u1) / 2.0 / circb).floor() * circb;
+        let mut meta = format!(
+            "Ø {:.1} mm — z = {:.1} mm — phi = {:.1}° — azimut {:.1}°",
+            br.r * 2.0,
+            br.z,
+            br.phi.to_degrees(),
+            br.psi.to_degrees()
+        );
+        if br.cut_by_neighbor {
+            meta.push_str(" — couture mutuelle incluse");
+        }
+        sheets.push(Sheet {
+            kind: PatternKind::Branch,
+            name: format!("Gabarit piquage {}", i + 1),
+            meta,
+            cut,
+            closed: false,
+            frame: (fstart, v0, circb, (v1 - v0).max(0.1)),
+            axis_u: 0.0,
+            circumference: circb,
+            bbox: (u0.min(fstart), v0, u1.max(fstart + circb), v1),
+            cut_bbox: (u0, v0, u1, v1),
+            annotations: Vec::new(),
+            holes: Vec::new(),
+        });
+    }
+
     Ok(sheets)
 }
 
@@ -385,6 +515,7 @@ fn layout_sheet(
         bbox,
         cut_bbox,
         annotations,
+        holes: Vec::new(),
     })
 }
 
@@ -498,6 +629,35 @@ mod tests {
         assert_eq!(tile_label(0, 0), "A1");
         assert_eq!(tile_label(2, 1), "C2");
         assert_eq!(tile_label(26, 0), "AA1");
+    }
+
+    #[test]
+    fn multi_node_produces_main_sheet_with_holes_plus_branch_sheets() {
+        use crate::multi::{MultiBranchSpec, MultiInput};
+        let mut d = doc();
+        d.source = SourceSpec::Multi(MultiInput {
+            r1: 40.0,
+            branches: vec![
+                MultiBranchSpec { r: 25.0, z: -45.0, phi: std::f64::consts::FRAC_PI_4, psi: 0.0 },
+                MultiBranchSpec {
+                    r: 25.0,
+                    z: 45.0,
+                    phi: std::f64::consts::PI - std::f64::consts::FRAC_PI_4,
+                    psi: 0.0,
+                },
+            ],
+            n_samples: 720,
+        });
+        let sheets = build_sheets(&d).unwrap();
+        assert_eq!(sheets.len(), 3, "1 tube principal + 2 gabarits de piquage");
+        let main = &sheets[0];
+        assert_eq!(main.kind, PatternKind::Main);
+        assert_eq!(main.holes.len(), 1, "2 lumières = 1 cut + 1 hole");
+        assert!((main.frame.2 - std::f64::consts::TAU * 40.0).abs() < 1e-9);
+        assert!(!sheets[1].closed && !sheets[2].closed);
+        // Both renderers accept the node document.
+        assert!(super::render_pdf(&d).is_ok());
+        assert!(super::render_dxf(&d).unwrap().contains("Gabarit piquage 2"));
     }
 
     #[test]

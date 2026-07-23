@@ -51,6 +51,18 @@ pub fn rot_x(phi: f64) -> Matrix3<f64> {
     )
 }
 
+/// Rotation matrix around the `Oz` axis by `psi` radians (azimuth around the
+/// main cylinder).
+#[inline]
+pub fn rot_z(psi: f64) -> Matrix3<f64> {
+    let (s, c) = psi.sin_cos();
+    Matrix3::new(
+          c,  -s, 0.0,
+          s,   c, 0.0,
+        0.0, 0.0, 1.0,
+    )
+}
+
 /// Forward parameterisation of cylinder 2 (radius `r2`, tilted by `phi`):
 /// the point is the matrix product `Rx(φ) · P₀(θ, t)` of equation (1) in
 /// `docs/THEORY.md` — the code mirrors the derivation literally.

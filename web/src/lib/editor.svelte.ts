@@ -71,6 +71,7 @@ class EditorStore {
 
   /** Patterns available for the current computation result. */
   get available(): PatternKind[] {
+    if (store.params.mode === "multi") return ["main"];
     return store.result?.dev_main ? ["branch", "main"] : ["branch"];
   }
 
@@ -78,6 +79,19 @@ class EditorStore {
   source(): SourceSpec {
     const p = store.params;
     const phi = (p.angleDeg * Math.PI) / 180;
+    if (p.mode === "multi") {
+      return {
+        mode: "multi",
+        r1: p.d1 / 2,
+        branches: p.branches.map((b) => ({
+          r: b.d / 2,
+          z: b.z,
+          phi: (b.angleDeg * Math.PI) / 180,
+          psi: (b.azimutDeg * Math.PI) / 180,
+        })),
+        n_samples: Math.min(p.samples, 720),
+      };
+    }
     return p.mode === "cyl_cyl"
       ? {
           mode: "cyl_cyl",
@@ -113,6 +127,17 @@ class EditorStore {
 
   /** Total exported page count, matching the backend layout logic. */
   pageCount(): number {
+    if (store.params.mode === "multi") {
+      const m = store.multiResult;
+      if (!m) return 0;
+      const sheetCount = 1 + m.branches.length;
+      if (this.scale === "fit") return sheetCount;
+      const mainPts = m.holes.flatMap((h) => h.pts);
+      const mainAnnots = this.annotations.filter((a) => a.pattern === "main");
+      let pages = this.tilesFor(mainPts, mainAnnots).length;
+      for (const b of m.branches) pages += this.tilesFor(b.dev, []).length;
+      return pages;
+    }
     if (!store.result) return 0;
     if (this.scale === "fit") return this.available.length;
     let pages = 0;
@@ -160,16 +185,44 @@ class EditorStore {
    * pages the backend will emit (empty tiles are skipped on both sides).
    */
   tiles(kind: PatternKind): { u0: number; vTop: number; w: number; h: number; label: string }[] {
-    const box = this.cutBox(kind);
-    if (!box || this.scale !== "one_to_one") return [];
-    const plan = planTiles(this.page, box.uMax - box.uMin, box.vMax - box.vMin);
-    const pts = this.cutPoints(kind);
-    const annots = this.annotations.filter((a) => a.pattern === kind);
+    if (this.scale !== "one_to_one") return [];
+    return this.tilesFor(
+      this.cutPoints(kind),
+      this.annotations.filter((a) => a.pattern === kind),
+    );
+  }
+
+  /**
+   * Non-empty 1:1 tiles for an explicit point set (multi-branch sheets) —
+   * same skip-empty logic as the backend.
+   */
+  tilesFor(
+    pts: { u: number; v: number }[],
+    annots: { u: number; v: number }[],
+  ): { u0: number; vTop: number; w: number; h: number; label: string }[] {
+    if (pts.length === 0 || this.scale !== "one_to_one") return [];
+    let uMin = pts[0].u,
+      uMax = uMin,
+      vMin = pts[0].v,
+      vMax = vMin;
+    for (const p of pts) {
+      uMin = Math.min(uMin, p.u);
+      uMax = Math.max(uMax, p.u);
+      vMin = Math.min(vMin, p.v);
+      vMax = Math.max(vMax, p.v);
+    }
+    for (const a of annots) {
+      uMin = Math.min(uMin, a.u);
+      uMax = Math.max(uMax, a.u);
+      vMin = Math.min(vMin, a.v);
+      vMax = Math.max(vMax, a.v);
+    }
+    const plan = planTiles(this.page, uMax - uMin, vMax - vMin);
     const out: { u0: number; vTop: number; w: number; h: number; label: string }[] = [];
     for (let row = 0; row < plan.rows; row++) {
       for (let col = 0; col < plan.cols; col++) {
-        const u0 = box.uMin + col * plan.stepX;
-        const vTop = box.vMax - row * plan.stepY;
+        const u0 = uMin + col * plan.stepX;
+        const vTop = vMax - row * plan.stepY;
         const m = plan.overlap;
         const inside = (u: number, v: number) =>
           u >= u0 - m && u <= u0 + plan.viewW + m && v >= vTop - plan.viewH - m && v <= vTop + m;

@@ -143,6 +143,13 @@ interface **Svelte 5 + Tailwind 4** servie en SPA, vue 3D **Three.js**.
 * **Layout outil** : paramètres à gauche, viewport central, bascule **3D ↔ 2D**,
   barre de statut ; **études en onglets** (multi-études, renommage au double-clic,
   copie des paramètres courants, persistance locale) — comme dans pilegroupx.
+* **Mode Châssis (multi-piquages)** : N tubes (Ø, position z, inclinaison φ,
+  azimut ψ) sur un même tube principal. Chaque piquage est coupé au **premier
+  contact** — tube principal *ou piquage voisin* : la **couture mutuelle**
+  entre tubes qui se rencontrent avant le longeron est calculée en formules
+  fermées et portée sur les gabarits. Le développé du principal porte
+  **toutes les lumières** positionnées (azimut → décalage horizontal exact) ;
+  chevauchements détectés et signalés.
 * **Vue 3D fidèle à la pièce** : chaque cylindre **s'arrête à l'intersection** —
   le tube incliné est maillé jusqu'à son premier contact avec le gros tube
   (selon la lèvre outer/inner choisie), le cylindre principal est percé de la
@@ -167,8 +174,8 @@ interface **Svelte 5 + Tailwind 4** servie en SPA, vue 3D **Three.js**.
   pour AutoCAD, QCAD, LibreCAD et chaînes CAM laser/plasma.
 * Export **SVG 1:1** par mise à plat, impression navigateur 1:1.
 
-**Feuille de route** : intersection cylindre × plan *orienté* (normale
-quelconque), export **G-code** direct.
+**Feuille de route** : export **G-code** direct, union booléenne des lumières
+qui se chevauchent.
 
 ### 2.1 Pré-requis
 

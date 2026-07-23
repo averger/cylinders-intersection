@@ -183,6 +183,10 @@ fn write_sheet(w: &mut DxfWriter, sheet: &Sheet, offset_x: f64) {
 
     let cut: Vec<(f64, f64)> = sheet.cut.iter().map(|&(u, v)| (u + dx, v)).collect();
     w.polyline("CUT", &cut, sheet.closed);
+    for (pts, closed) in &sheet.holes {
+        let shifted: Vec<(f64, f64)> = pts.iter().map(|&(u, v)| (u + dx, v)).collect();
+        w.polyline("CUT", &shifted, *closed);
+    }
 
     w.text("TEXT", u0 + dx, v1 + 8.0, 5.0, &sheet.name);
     w.text("TEXT", u0 + dx, v1 + 2.0, 3.0, &sheet.meta);

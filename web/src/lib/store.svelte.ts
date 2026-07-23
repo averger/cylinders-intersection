@@ -5,7 +5,7 @@
  * and recomputed on switch (the backend answers in milliseconds).
  */
 
-import { api, type Branch, type IntersectionPayload } from "./api";
+import { api, type Branch, type IntersectionPayload, type MultiPayload } from "./api";
 import type {
   Annotation,
   Layers,
@@ -14,9 +14,17 @@ import type {
   TitleBlock,
 } from "./export";
 
-export type Mode = "cyl_cyl" | "cyl_plane";
+export type Mode = "cyl_cyl" | "cyl_plane" | "multi";
 export type View = "3d" | "2d";
 export type Theme = "light" | "dark";
+
+/** One branch of a multi-branch node, in UI units (mm / degrees). */
+export interface BranchParam {
+  d: number;          // branch diameter, mm
+  z: number;          // position along the main axis, mm
+  angleDeg: number;   // inclination from the main axis, (0°, 180°)
+  azimutDeg: number;  // azimuth around the main tube, degrees
+}
 
 export interface Params {
   mode: Mode;
@@ -27,6 +35,8 @@ export interface Params {
   branch: Branch;
   z0: number;       // plane offset (cyl-plane), mm
   samples: number;
+  /** Branches of the multi mode ("châssis"). */
+  branches: BranchParam[];
 }
 
 export interface EditorState {
@@ -45,6 +55,14 @@ export interface Study {
   editor: EditorState;
 }
 
+/** Default node: a V of two Ø 60 tubes meeting above the main tube. */
+export function defaultBranches(): BranchParam[] {
+  return [
+    { d: 60, z: -55, angleDeg: 45, azimutDeg: 0 },
+    { d: 60, z: 55, angleDeg: 135, azimutDeg: 0 },
+  ];
+}
+
 const DEFAULT_PARAMS: Params = {
   mode: "cyl_cyl",
   d1: 100,
@@ -54,6 +72,7 @@ const DEFAULT_PARAMS: Params = {
   branch: "outer",
   z0: 0,
   samples: 1440,
+  branches: defaultBranches(),
 };
 
 function today(): string {
@@ -102,8 +121,12 @@ function load(): PersistShape | null {
     // Merge with defaults so older payloads gain new fields gracefully.
     data.studies = data.studies.map((s) => {
       const params = { ...DEFAULT_PARAMS, ...s.params };
-      // Le domaine gueule de loup impose Ø₂ ≤ Ø₁.
+      // Le domaine gueule de loup impose Ø₂ ≤ Ø₁ — pour chaque piquage aussi.
       params.d2 = Math.min(params.d2, params.d1);
+      if (!Array.isArray(params.branches) || params.branches.length === 0) {
+        params.branches = defaultBranches();
+      }
+      params.branches = params.branches.map((b) => ({ ...b, d: Math.min(b.d, params.d1) }));
       return {
         id: s.id ?? newId(),
         name: s.name ?? "Étude",
@@ -125,6 +148,7 @@ class AppStore {
   theme = $state<Theme>("light");
 
   result = $state<IntersectionPayload | null>(null);
+  multiResult = $state<MultiPayload | null>(null);
   loading = $state(false);
   error = $state<string | null>(null);
   lastComputedAt = $state<number>(0);
@@ -231,6 +255,11 @@ class AppStore {
     }, 250);
   }
 
+  /** Whether the active mode has a usable computation result. */
+  get hasResult(): boolean {
+    return this.params.mode === "multi" ? this.multiResult !== null : this.result !== null;
+  }
+
   // ----- compute ----------------------------------------------------------
   async compute() {
     const myToken = ++this.token;
@@ -239,6 +268,23 @@ class AppStore {
     try {
       const p = this.params;
       const phi = (p.angleDeg * Math.PI) / 180;
+      if (p.mode === "multi") {
+        const res = await api.multi({
+          r1: p.d1 / 2,
+          branches: p.branches.map((b) => ({
+            r: b.d / 2,
+            z: b.z,
+            phi: (b.angleDeg * Math.PI) / 180,
+            psi: (b.azimutDeg * Math.PI) / 180,
+          })),
+          n_samples: Math.min(p.samples, 720),
+        });
+        if (myToken !== this.token) return;
+        this.multiResult = res;
+        this.result = null;
+        this.lastComputedAt = Date.now();
+        return;
+      }
       let res: IntersectionPayload;
       if (p.mode === "cyl_cyl") {
         res = await api.cylCyl({
@@ -259,11 +305,13 @@ class AppStore {
       }
       if (myToken !== this.token) return;
       this.result = res;
+      this.multiResult = null;
       this.lastComputedAt = Date.now();
     } catch (e: unknown) {
       if (myToken !== this.token) return;
       this.error = e instanceof Error ? e.message : String(e);
       this.result = null;
+      this.multiResult = null;
     } finally {
       if (myToken === this.token) this.loading = false;
     }

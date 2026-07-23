@@ -5,44 +5,94 @@
   import { editor } from "../lib/editor.svelte";
   import { downloadSVG } from "../lib/svg";
   import type { PatternKind } from "../lib/export";
+  import type { DevPoint } from "../lib/api";
+
+  /** Explicit pattern data — used by the multi-branch mode where the sheets
+   * do not map 1-to-1 onto the historical branch/main pair. */
+  export interface PatternData {
+    points: DevPoint[];
+    closed: boolean;
+    holes?: { pts: DevPoint[]; closed: boolean }[];
+    title: string;
+    diameter: number;
+    circumference: number;
+    accent?: string;
+    /** Annotations are only editable on the sheet that owns `kind`. */
+    annotable?: boolean;
+    slugName?: string;
+  }
 
   interface Props {
     kind: PatternKind;
+    data?: PatternData;
   }
-  let { kind }: Props = $props();
+  let { kind, data }: Props = $props();
 
   const MARGIN = 16; // mm of breathing room around the drawing
 
   let points = $derived.by(() => {
+    if (data) return data.points;
     const r = store.result;
     if (!r) return [];
     return kind === "branch" ? r.dev_branch : (r.dev_main ?? []);
   });
   // The branch development is always an open curve (u = 0 meets u = 2πR on
   // the rolled tube); the gueule de loup closes when the backend says so.
-  let closed = $derived(kind === "branch" ? false : (store.result?.dev_main_closed ?? false));
+  let closed = $derived(
+    data ? data.closed : kind === "branch" ? false : (store.result?.dev_main_closed ?? false),
+  );
+  let holes = $derived(data?.holes ?? []);
+  let annotable = $derived(data ? data.annotable === true : true);
   // Viewport framed on the cut extents (+ margin) — the gueule de loup
   // sheet no longer spans the whole unwrapped circumference.
   let box = $derived.by(() => {
+    if (data) {
+      const all = [...data.points, ...holes.flatMap((h) => h.pts)];
+      if (all.length === 0) return null;
+      let uMin = all[0].u,
+        uMax = uMin,
+        vMin = all[0].v,
+        vMax = vMin;
+      for (const p of all) {
+        uMin = Math.min(uMin, p.u);
+        uMax = Math.max(uMax, p.u);
+        vMin = Math.min(vMin, p.v);
+        vMax = Math.max(vMax, p.v);
+      }
+      if (annotable) {
+        for (const a of editor.annotations) {
+          if (a.pattern !== kind) continue;
+          uMin = Math.min(uMin, a.u);
+          uMax = Math.max(uMax, a.u);
+          vMin = Math.min(vMin, a.v);
+          vMax = Math.max(vMax, a.v);
+        }
+      }
+      return { uMin, vMin, w: Math.max(uMax - uMin, 1), h: Math.max(vMax - vMin, 0.1) };
+    }
     const cb = editor.cutBox(kind);
     if (!cb) return null;
     return { uMin: cb.uMin, vMin: cb.vMin, w: Math.max(cb.uMax - cb.uMin, 1), h: Math.max(cb.vMax - cb.vMin, 0.1) };
   });
 
-  let accent = $derived(kind === "branch" ? "var(--ember)" : "var(--cyan)");
+  let accent = $derived(data?.accent ?? (kind === "branch" ? "var(--ember)" : "var(--cyan)"));
   let title = $derived(
-    kind === "branch"
-      ? store.result?.mode === "cyl_cyl"
-        ? "Développé tube incliné — Ø₂"
-        : "Développé du tube — coupe plane"
-      : "Gueule de loup — Ø₁",
+    data
+      ? data.title
+      : kind === "branch"
+        ? store.result?.mode === "cyl_cyl"
+          ? "Développé tube incliné — Ø₂"
+          : "Développé du tube — coupe plane"
+        : "Gueule de loup — Ø₁",
   );
   let diameter = $derived.by(() => {
+    if (data) return data.diameter;
     const r = store.result;
     if (!r) return 0;
     return kind === "branch" ? (r.r2 ?? r.r1) * 2 : r.r1 * 2;
   });
   let circumference = $derived.by(() => {
+    if (data) return data.circumference;
     const r = store.result;
     if (!r) return 0;
     return kind === "branch" ? (r.circumference_branch ?? r.circumference_main) : r.circumference_main;
@@ -73,21 +123,25 @@
     return out;
   });
 
-  // Alignment marks: where each generatrix crosses the cut line (ticks to
+  // Alignment marks: where each generatrix crosses the cut lines (ticks to
   // match with lines traced on the tube) + the axis-plane datum v = 0.
-  function crossings(g: number): number[] {
-    const n = points.length;
-    if (n < 2) return [];
-    const last = closed ? n : n - 1;
-    const out: number[] = [];
+  function crossingsOf(pts: DevPoint[], isClosed: boolean, g: number, out: number[]) {
+    const n = pts.length;
+    if (n < 2) return;
+    const last = isClosed ? n : n - 1;
     for (let i = 0; i < last; i++) {
-      const a = points[i];
-      const b = points[(i + 1) % n];
+      const a = pts[i];
+      const b = pts[(i + 1) % n];
       if ((a.u - g) * (b.u - g) < 0) {
         const t = (g - a.u) / (b.u - a.u);
         out.push(a.v + t * (b.v - a.v));
       }
     }
+  }
+  function crossings(g: number): number[] {
+    const out: number[] = [];
+    crossingsOf(points, closed, g, out);
+    for (const h of holes) crossingsOf(h.pts, h.closed, g, out);
     return out;
   }
   let ticks = $derived(gens.flatMap((g) => crossings(g.u).map((v) => ({ u: g.u, v }))));
@@ -103,13 +157,15 @@
     return box ? box.h - (v - box.vMin) + MARGIN : 0;
   }
 
-  let cutPath = $derived.by(() => {
-    if (points.length === 0) return "";
-    const d = points
+  function pathOf(pts: DevPoint[], isClosed: boolean): string {
+    if (pts.length === 0) return "";
+    const d = pts
       .map((p, i) => `${i === 0 ? "M" : "L"}${X(p.u).toFixed(3)} ${Y(p.v).toFixed(3)}`)
       .join(" ");
-    return closed ? `${d} Z` : d;
-  });
+    return isClosed ? `${d} Z` : d;
+  }
+  let cutPath = $derived(pathOf(points, closed));
+  let holePaths = $derived(holes.map((h) => pathOf(h.pts, h.closed)));
 
   function gridLines(min: number, span: number): { at: number; major: boolean }[] {
     const out: { at: number; major: boolean }[] = [];
@@ -124,14 +180,20 @@
   let vGrid = $derived(box ? gridLines(box.vMin, box.h) : []);
 
   // Non-empty pages only, tiled over the cut extents — mirrors the backend.
-  let tiles = $derived(
-    editor
-      .tiles(kind)
-      .map((t) => ({ x: X(t.u0), y: Y(t.vTop), w: t.w, h: t.h, label: t.label })),
-  );
+  let tiles = $derived.by(() => {
+    const raw = data
+      ? editor.tilesFor(
+          [...points, ...holes.flatMap((h) => h.pts)],
+          annotable ? editor.annotations.filter((a) => a.pattern === kind) : [],
+        )
+      : editor.tiles(kind);
+    return raw.map((t) => ({ x: X(t.u0), y: Y(t.vTop), w: t.w, h: t.h, label: t.label }));
+  });
 
   let annotationsHere = $derived(
-    editor.annotations.map((a, index) => ({ a, index })).filter(({ a }) => a.pattern === kind),
+    annotable
+      ? editor.annotations.map((a, index) => ({ a, index })).filter(({ a }) => a.pattern === kind)
+      : [],
   );
 
   // ----- annotation dragging ----------------------------------------------
@@ -165,6 +227,7 @@
   }
 
   function onBackgroundDblClick(e: MouseEvent) {
+    if (!annotable) return;
     const mm = clientToMm(e);
     if (mm) editor.addAnnotation(kind, Math.round(mm.u), Math.round(mm.v));
   }
@@ -220,13 +283,19 @@
     parts.push(
       `<path d="${cutPath}" fill="none" stroke="#000" stroke-width="${editor.cutWidth}" stroke-linejoin="round" stroke-linecap="round"/>`,
     );
+    for (const hp of holePaths) {
+      parts.push(
+        `<path d="${hp}" fill="none" stroke="#000" stroke-width="${editor.cutWidth}" stroke-linejoin="round" stroke-linecap="round"/>`,
+      );
+    }
     for (const { a } of annotationsHere) {
       parts.push(
         `<text x="${X(a.u).toFixed(2)}" y="${Y(a.v).toFixed(2)}" font-size="${a.size_mm}" fill="#111" font-family="Helvetica, Arial, sans-serif">${esc(a.text)}</text>`,
       );
     }
     parts.push(`</svg>`);
-    const name = kind === "branch" ? "cylix-tube" : "cylix-gueule-de-loup";
+    const name =
+      data?.slugName ?? (kind === "branch" ? "cylix-tube" : "cylix-gueule-de-loup");
     downloadSVG(`${name}.svg`, parts.join("\n"));
   }
 </script>
@@ -235,7 +304,7 @@
   <header class="flex items-center justify-between gap-3 px-4 pt-3 pb-1 z-10">
     <div class="flex items-center gap-3 min-w-0">
       <span class="pill shrink-0" style="border-color: color-mix(in srgb, {accent} 40%, transparent); color: {accent}">{title}</span>
-      {#if store.result}
+      {#if points.length > 0}
         <span class="num text-[10px] text-ash truncate">
           Ø {diameter.toFixed(1)} mm · largeur {box ? box.w.toFixed(1) : "—"} mm · hauteur {box
             ? box.h.toFixed(1)
@@ -391,6 +460,16 @@
         stroke-linejoin="round"
         stroke-linecap="round"
       />
+      {#each holePaths as hp, hi (hi)}
+        <path
+          d={hp}
+          fill="none"
+          style="stroke: {accent}"
+          stroke-width={Math.max(editor.cutWidth, viewW / 700)}
+          stroke-linejoin="round"
+          stroke-linecap="round"
+        />
+      {/each}
 
       {#if !closed && points.length > 0}
         <circle cx={X(points[0].u)} cy={Y(points[0].v)} r={viewW / 400} style="fill: {accent}" />

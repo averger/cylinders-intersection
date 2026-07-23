@@ -15,6 +15,7 @@ use serde::Serialize;
 use crate::assets::Assets;
 use crate::export::{render_dxf, render_pdf, ExportDocument, ExportError};
 use crate::intersection::{cyl_cyl, cyl_plane, CylCylInput, CylPlaneInput, IntersectionPayload};
+use crate::multi::{multi, MultiInput, MultiPayload};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -48,6 +49,7 @@ pub fn router() -> Router {
         .route("/api/health", get(health))
         .route("/api/intersect/cyl-cyl", post(api_cyl_cyl))
         .route("/api/intersect/cyl-plane", post(api_cyl_plane))
+        .route("/api/intersect/multi", post(api_multi))
         .route("/api/export/pdf", post(api_export_pdf))
         .route("/api/export/dxf", post(api_export_dxf))
         .fallback(static_fallback)
@@ -83,6 +85,33 @@ async fn api_cyl_plane(Json(input): Json<CylPlaneInput>) -> Result<Json<Intersec
         ));
     }
     Ok(Json(cyl_plane(input)))
+}
+
+async fn api_multi(Json(input): Json<MultiInput>) -> Result<Json<MultiPayload>, ApiError> {
+    if input.r1 <= 0.0 {
+        return Err(ApiError::bad_request("r1 must be strictly positive."));
+    }
+    if input.branches.is_empty() || input.branches.len() > 8 {
+        return Err(ApiError::bad_request("The node accepts between 1 and 8 branches."));
+    }
+    for (i, b) in input.branches.iter().enumerate() {
+        if b.r <= 0.0 || b.r > input.r1 {
+            return Err(ApiError::bad_request(format!(
+                "Branch {}: radius must lie in (0, r1].",
+                i + 1
+            )));
+        }
+        if !(b.phi > 1e-3 && b.phi < std::f64::consts::PI - 1e-3) {
+            return Err(ApiError::bad_request(format!(
+                "Branch {}: phi must lie strictly between 0 and π (no branch parallel to the main axis).",
+                i + 1
+            )));
+        }
+        if !b.z.is_finite() || !b.psi.is_finite() {
+            return Err(ApiError::bad_request(format!("Branch {}: invalid z or psi.", i + 1)));
+        }
+    }
+    Ok(Json(multi(&input)))
 }
 
 async fn api_export_pdf(Json(doc): Json<ExportDocument>) -> Result<Response, ApiError> {
