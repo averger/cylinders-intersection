@@ -113,7 +113,7 @@
       padding: 72px 0 8px; display: grid; gap: 18px;
       grid-template-columns: repeat(3, 1fr);
     }
-    @media (max-width: 760px) { .features { grid-template-columns: 1fr; } .signup form { flex-direction: column; } }
+    @media (max-width: 760px) { .features { grid-template-columns: 1fr; } }
 
     /* Small screens */
     @media (max-width: 560px) {
@@ -123,7 +123,9 @@
       .hero { padding: 44px 0 28px; }
       .lede { font-size: 15px; margin-top: 16px; }
       .signup { margin-top: 28px; }
-      .signup input[type="email"], .signup button { height: 50px; }
+      .signup form { gap: 8px; }
+      .signup input[type="email"] { padding: 0 12px; }
+      .signup button { padding: 0 16px; }
       .shot { margin-top: 40px; }
       .shot figure { border-radius: 14px; }
       .shot figcaption { font-size: 10px; padding: 8px 12px; }
@@ -199,10 +201,9 @@
     <section class="hero">
       <h1>Intersection de cylindres,<br /><span class="accent">simplement.</span></h1>
       <p class="lede">
-        Gueule de loup, piquage, coupe en sifflet : Cylix calcule les développés par
-        formules fermées, sans approximation. Deux gabarits par intersection — le tube
-        sécant et la lumière à percer — exportés en PDF à l'échelle 1:1 ou en DXF.
-        Export G-code à venir.
+        Gueule de loup, piquage, coupe en sifflet : Cylix trace les gabarits de découpe.
+        Deux gabarits par intersection — le tube sécant et la lumière à percer — exportés
+        en PDF à l'échelle 1:1 ou en DXF. Export G-code à venir.
       </p>
 
       <div class="signup">
@@ -226,12 +227,12 @@
 
     <section class="features">
       <div class="card">
-        <span class="k">Exact</span>
-        <h3>Formules fermées, vérifiées</h3>
+        <span class="k">Juste</span>
+        <h3>Ça tombe juste</h3>
         <p>
-          Pas de solveur numérique : l'intersection est résolue génératrice par génératrice,
-          en formules fermées. Chaque équation de la théorie est vérifiée mécaniquement —
-          26 contrôles symboliques et numériques, publiés avec le code.
+          Réglez les paramètres, contrôlez en 3D, exportez : les mises à plat sont prêtes
+          à découper. Pas de reprise à la lime au montage — ce que vous découpez est ce
+          qui s'ajuste.
         </p>
       </div>
       <div class="card">
@@ -257,9 +258,9 @@
 
     <div class="proof">
       <div><div class="v num">1:1</div><div class="l">échelle d'export</div></div>
-      <div><div class="v num">&lt; 0,01 mm</div><div class="l">erreur bornée</div></div>
-      <div><div class="v num">26</div><div class="l">contrôles de vérification</div></div>
-      <div><div class="v">Rust</div><div class="l">moteur de calcul</div></div>
+      <div><div class="v num">&lt; 0,01 mm</div><div class="l">de précision</div></div>
+      <div><div class="v num">2</div><div class="l">gabarits par intersection</div></div>
+      <div><div class="v">PDF · DXF</div><div class="l">formats d'export</div></div>
     </div>
 
     <section class="closing">
@@ -291,7 +292,7 @@
           <path d="M16.0 48.0 L24.9 35.0 L32.0 31.0 L39.1 35.0 L48.0 48.0 L56.9 61.0 L64.0 65.0 L71.1 61.0 L80.0 48.0"
             stroke="#E8500F" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
-        Cylix — moteur de calcul Rust · exports PDF 1:1 &amp; DXF
+        Cylix — gabarits de découpe · PDF 1:1 &amp; DXF
       </span>
       <span>© 2026 · <a href="mailto:contact@cylix.app" style="color:inherit">contact</a></span>
     </footer>
