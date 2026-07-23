@@ -242,7 +242,12 @@ pub fn multi(input: &MultiInput) -> MultiPayload {
         }
     }
 
-    // Warnings: mutual seams and overlapping openings.
+    // Overlapping openings are merged into their envelope: the template of
+    // the main tube must only ever show the actual cut contour.
+    let circ = std::f64::consts::TAU * r1;
+    let (holes, merged) = merge_overlapping_holes(holes, circ);
+
+    // Warnings: mutual seams and merged openings.
     let mut warnings = Vec::new();
     for &(i, j) in &neighbor_pairs {
         warnings.push(format!(
@@ -251,19 +256,12 @@ pub fn multi(input: &MultiInput) -> MultiPayload {
             j + 1
         ));
     }
-    let circ = std::f64::consts::TAU * r1;
-    for a in 0..holes.len() {
-        for b in (a + 1)..holes.len() {
-            if let (Some(ba), Some(bb)) = (holes[a].bbox, holes[b].bbox) {
-                if bboxes_overlap_on_tube(&ba, &bb, circ) {
-                    warnings.push(format!(
-                        "Les lumières des piquages {} et {} se chevauchent sur le tube principal — la découpe résultante est l'union des deux contours.",
-                        holes[a].branch + 1,
-                        holes[b].branch + 1
-                    ));
-                }
-            }
-        }
+    for (i, j) in merged {
+        warnings.push(format!(
+            "Les lumières des piquages {} et {} se chevauchent — la feuille du tube principal porte leur contour d'enveloppe.",
+            i + 1,
+            j + 1
+        ));
     }
 
     MultiPayload {
@@ -274,6 +272,161 @@ pub fn multi(input: &MultiInput) -> MultiPayload {
         holes,
         warnings,
     }
+}
+
+// ---------------------------------------------------------------------
+// Envelope of overlapping openings (2D boolean union of closed loops).
+// ---------------------------------------------------------------------
+
+/// Even-odd point-in-polygon test on a closed developed loop.
+fn point_in_loop(u: f64, v: f64, pts: &[DevPoint]) -> bool {
+    let mut inside = false;
+    let n = pts.len();
+    for i in 0..n {
+        let a = &pts[i];
+        let b = &pts[(i + 1) % n];
+        if (a.v > v) != (b.v > v) {
+            let x = a.u + (v - a.v) / (b.v - a.v) * (b.u - a.u);
+            if x > u {
+                inside = !inside;
+            }
+        }
+    }
+    inside
+}
+
+fn mean_step(pts: &[DevPoint]) -> f64 {
+    if pts.len() < 2 {
+        return 1.0;
+    }
+    let total: f64 = pts
+        .windows(2)
+        .map(|w| (w[1].u - w[0].u).hypot(w[1].v - w[0].v))
+        .sum();
+    total / (pts.len() - 1) as f64
+}
+
+/// Boolean union of two dense closed loops: keep the runs of each loop whose
+/// segments are not strictly inside the other, then stitch them back into a
+/// single closed contour by endpoint proximity.
+fn union_two_loops(a: &[DevPoint], b: &[DevPoint]) -> Option<Vec<DevPoint>> {
+    let runs_outside = |own: &[DevPoint], other: &[DevPoint]| -> Vec<Vec<DevPoint>> {
+        let n = own.len();
+        let keep: Vec<bool> = (0..n)
+            .map(|i| {
+                let p = &own[i];
+                let q = &own[(i + 1) % n];
+                !point_in_loop(0.5 * (p.u + q.u), 0.5 * (p.v + q.v), other)
+            })
+            .collect();
+        if keep.iter().all(|&k| k) {
+            return vec![own.to_vec()];
+        }
+        // Start each run just after a dropped segment.
+        let mut runs = Vec::new();
+        let start = (0..n).find(|&i| !keep[i]).unwrap();
+        let mut current: Vec<DevPoint> = Vec::new();
+        for off in 1..=n {
+            let i = (start + off) % n;
+            if keep[i] {
+                if current.is_empty() {
+                    current.push(own[i]);
+                }
+                current.push(own[(i + 1) % n]);
+            } else if !current.is_empty() {
+                runs.push(std::mem::take(&mut current));
+            }
+        }
+        if !current.is_empty() {
+            runs.push(current);
+        }
+        runs
+    };
+
+    let mut runs = runs_outside(a, b);
+    runs.extend(runs_outside(b, a));
+    runs.retain(|r| r.len() >= 2);
+    if runs.is_empty() {
+        return None;
+    }
+    let tol = 6.0 * mean_step(a).max(mean_step(b));
+
+    // Stitch: grow a contour by appending the run whose endpoint matches.
+    let mut contour = runs.swap_remove(0);
+    while !runs.is_empty() {
+        let end = *contour.last().unwrap();
+        let mut best: Option<(usize, bool, f64)> = None;
+        for (idx, r) in runs.iter().enumerate() {
+            let df = (r[0].u - end.u).hypot(r[0].v - end.v);
+            let dl = (r[r.len() - 1].u - end.u).hypot(r[r.len() - 1].v - end.v);
+            let (rev, d) = if df <= dl { (false, df) } else { (true, dl) };
+            if best.is_none() || d < best.unwrap().2 {
+                best = Some((idx, rev, d));
+            }
+        }
+        let (idx, rev, d) = best.unwrap();
+        if d > tol {
+            break; // disconnected leftover (shouldn't happen on dense loops)
+        }
+        let mut r = runs.swap_remove(idx);
+        if rev {
+            r.reverse();
+        }
+        contour.extend(r);
+    }
+    Some(contour)
+}
+
+/// Merge every cluster of overlapping closed openings into its envelope.
+/// Returns the new hole list plus the merged index pairs (for warnings).
+fn merge_overlapping_holes(
+    mut holes: Vec<HoleResult>,
+    circ: f64,
+) -> (Vec<HoleResult>, Vec<(usize, usize)>) {
+    let mut merged_pairs = Vec::new();
+    'outer: loop {
+        for i in 0..holes.len() {
+            for j in (i + 1)..holes.len() {
+                if !(holes[i].closed && holes[j].closed) {
+                    continue;
+                }
+                let (Some(bi), Some(bj)) = (holes[i].bbox, holes[j].bbox) else {
+                    continue;
+                };
+                if !bboxes_overlap_on_tube(&bi, &bj, circ) {
+                    continue;
+                }
+                // Bring j into i's unwrap period before the real overlap test.
+                let shift = (((bi.u_min + bi.u_max) - (bj.u_min + bj.u_max)) / 2.0 / circ).round()
+                    * circ;
+                let pts_j: Vec<DevPoint> = holes[j]
+                    .pts
+                    .iter()
+                    .map(|p| DevPoint { theta: p.theta, u: p.u + shift, v: p.v })
+                    .collect();
+                let really_overlaps = pts_j
+                    .iter()
+                    .any(|p| point_in_loop(p.u, p.v, &holes[i].pts))
+                    || holes[i]
+                        .pts
+                        .iter()
+                        .any(|p| point_in_loop(p.u, p.v, &pts_j));
+                if !really_overlaps {
+                    continue;
+                }
+                if let Some(contour) = union_two_loops(&holes[i].pts, &pts_j) {
+                    merged_pairs.push((holes[i].branch, holes[j].branch));
+                    let branch = holes[i].branch.min(holes[j].branch);
+                    let bbox = BBox2::from_points(contour.iter().map(|p| (p.u, p.v)));
+                    holes[i] = HoleResult { branch, pts: contour, closed: true, bbox };
+                    holes.remove(j);
+                    continue 'outer;
+                }
+            }
+        }
+        break;
+    }
+    (holes, merged_pairs)
 }
 
 /// Overlap test between two developed bboxes, `u` being periodic (2πR).
@@ -417,20 +570,101 @@ mod tests {
         assert!(a.holes[0].closed && b.holes[0].closed);
     }
 
+    /// Shoelace area of a closed developed loop.
+    fn loop_area(pts: &[DevPoint]) -> f64 {
+        let n = pts.len();
+        let mut s = 0.0;
+        for i in 0..n {
+            let a = &pts[i];
+            let b = &pts[(i + 1) % n];
+            s += a.u * b.v - b.u * a.v;
+        }
+        (s / 2.0).abs()
+    }
+
     #[test]
-    fn overlapping_holes_raise_a_warning() {
-        // Two branches at the same height, azimuths 0 and a small angle:
-        // their openings overlap on the main tube.
+    fn overlapping_holes_are_merged_into_their_envelope() {
+        // Two branches at the same height, azimuths 0 and 0.5 rad: their
+        // openings overlap — the main-tube sheet must carry ONE envelope
+        // contour, not two crossing loops.
         let mk = |psi: f64| MultiBranchSpec { r: 25.0, z: 0.0, phi: 1.2, psi };
         let res = multi(&MultiInput {
             r1: 40.0,
             branches: vec![mk(0.0), mk(0.5)],
             n_samples: 720,
         });
+        assert_eq!(res.holes.len(), 1, "enveloppe unique attendue");
+        assert!(res.holes[0].closed);
         assert!(
-            res.warnings.iter().any(|w| w.contains("chevauchent")),
+            res.warnings.iter().any(|w| w.contains("enveloppe")),
             "warnings: {:?}",
             res.warnings
         );
+
+        // Envelope sanity vs the two isolated openings: same overall bbox,
+        // and an area strictly between max(A, B) and A + B (the lens of the
+        // overlap is counted once, not twice).
+        let iso = |psi: f64| {
+            multi(&MultiInput { r1: 40.0, branches: vec![mk(psi)], n_samples: 720 }).holes[0]
+                .clone()
+        };
+        let (a, b) = (iso(0.0), iso(0.5));
+        let (ba, bb) = (a.bbox.unwrap(), b.bbox.unwrap());
+        let be = res.holes[0].bbox.unwrap();
+        assert!((be.u_min - ba.u_min.min(bb.u_min)).abs() < 1e-6);
+        assert!((be.u_max - ba.u_max.max(bb.u_max)).abs() < 1e-6);
+        assert!((be.v_min - ba.v_min.min(bb.v_min)).abs() < 1e-6);
+        assert!((be.v_max - ba.v_max.max(bb.v_max)).abs() < 1e-6);
+        let (area_a, area_b) = (loop_area(&a.pts), loop_area(&b.pts));
+        let area_e = loop_area(&res.holes[0].pts);
+        assert!(area_e > area_a.max(area_b) * 1.01, "{area_e} vs {area_a}/{area_b}");
+        assert!(area_e < (area_a + area_b) * 0.999, "la lentille doit être comptée une fois");
+    }
+
+    #[test]
+    fn disjoint_holes_are_left_untouched() {
+        let mk = |psi: f64| MultiBranchSpec { r: 15.0, z: 0.0, phi: 1.2, psi };
+        let res = multi(&MultiInput {
+            r1: 45.0,
+            branches: vec![mk(0.0), mk(std::f64::consts::PI)],
+            n_samples: 720,
+        });
+        assert_eq!(res.holes.len(), 2);
+        assert!(res.warnings.is_empty());
+    }
+
+    #[test]
+    fn every_rim_point_lies_exactly_on_its_cutting_surface() {
+        // Robustness of the matrix pipeline: every 3D rim point of a V-node
+        // template must sit either ON the main cylinder (distance to Oz
+        // = r1) or ON the neighbour cylinder (distance to its axis = r_j),
+        // to numerical precision.
+        let phi = std::f64::consts::FRAC_PI_4;
+        let specs = [
+            MultiBranchSpec { r: 25.0, z: -45.0, phi, psi: 0.3 },
+            MultiBranchSpec { r: 25.0, z: 45.0, phi: std::f64::consts::PI - phi, psi: 0.3 },
+        ];
+        let node = multi(&MultiInput { r1: 40.0, branches: specs.to_vec(), n_samples: 720 });
+
+        let frame = |s: &MultiBranchSpec| {
+            let m = crate::geometry::rot_z(s.psi) * crate::geometry::rot_x(s.phi);
+            (nalgebra::Vector3::new(0.0, 0.0, s.z), m * nalgebra::Vector3::z())
+        };
+        for (i, br) in node.branches.iter().enumerate() {
+            let other = &specs[1 - i];
+            let (c_j, d_j) = frame(other);
+            for p in &br.curve3d {
+                let v = nalgebra::Vector3::new(p.x, p.y, p.z);
+                let dist_main = (v.x * v.x + v.y * v.y).sqrt();
+                let rel = v - c_j;
+                let dist_axis_j = (rel - d_j * rel.dot(&d_j)).norm();
+                let on_main = (dist_main - 40.0).abs() < 1e-9;
+                let on_neighbor = (dist_axis_j - other.r).abs() < 1e-9;
+                assert!(
+                    on_main || on_neighbor,
+                    "point hors surface : d_main = {dist_main}, d_axe_voisin = {dist_axis_j}"
+                );
+            }
+        }
     }
 }

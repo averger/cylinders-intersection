@@ -318,7 +318,7 @@ et l'angle réel entre le plan et la section droite est
 $\arctan\sqrt{a^2+b^2}$ ; le second angle ne fait que **tourner la phase** du
 gabarit autour du tube. (13) est le cas $a = 0$.
 
-### 4.4 Nœud multi-piquages (châssis tubulaire)
+### 4.4 Nœud multi-tubes (N piquages sur un tube principal)
 
 Un tube principal peut recevoir $N$ piquages, chacun décrit par son rayon
 $r_i \le R_1$, sa hauteur $z_i$ sur l'axe principal, son inclinaison

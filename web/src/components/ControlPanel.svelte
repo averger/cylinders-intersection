@@ -11,7 +11,7 @@
   const modeOptions = [
     { label: "Cyl / Cyl", value: "cyl_cyl" as Mode },
     { label: "Cyl / Plan", value: "cyl_plane" as Mode },
-    { label: "Châssis", value: "multi" as Mode },
+    { label: "Multi tube", value: "multi" as Mode },
   ];
 
   function patchBranch(index: number, patch: Partial<(typeof store.params.branches)[number]>) {

@@ -143,7 +143,7 @@ interface **Svelte 5 + Tailwind 4** servie en SPA, vue 3D **Three.js**.
 * **Layout outil** : paramètres à gauche, viewport central, bascule **3D ↔ 2D**,
   barre de statut ; **études en onglets** (multi-études, renommage au double-clic,
   copie des paramètres courants, persistance locale) — comme dans pilegroupx.
-* **Mode Châssis (multi-piquages)** : N tubes (Ø, position z, inclinaison φ,
+* **Mode Multi tube** : N tubes (Ø, position z, inclinaison φ,
   azimut ψ) sur un même tube principal. Chaque piquage est coupé au **premier
   contact** — tube principal *ou piquage voisin* : la **couture mutuelle**
   entre tubes qui se rencontrent avant le longeron est calculée en formules

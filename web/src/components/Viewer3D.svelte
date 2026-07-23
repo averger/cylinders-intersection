@@ -865,15 +865,20 @@
     r: number;
   }
 
-  /** Frame of a branch: columns of Rz(ψ)·Rx(φ), matching the engine. */
+  /**
+   * Frame of a branch: the literal matrix product Rz(ψ)·Rx(φ) applied to
+   * the canonical basis — the exact same rotation pipeline as the Rust
+   * engine (geometry::rot_z * geometry::rot_x), in math coordinates.
+   */
   function branchFrame(b: { r: number; z: number; phi: number; psi: number }): BranchFrameT {
-    const cphi = Math.cos(b.phi), sphi = Math.sin(b.phi);
-    const cpsi = Math.cos(b.psi), spsi = Math.sin(b.psi);
+    const M = new THREE.Matrix4()
+      .makeRotationZ(b.psi)
+      .multiply(new THREE.Matrix4().makeRotationX(b.phi));
     return {
       c: new THREE.Vector3(0, 0, b.z),
-      u: new THREE.Vector3(cpsi, spsi, 0),
-      w: new THREE.Vector3(-spsi * cphi, cpsi * cphi, sphi),
-      d: new THREE.Vector3(spsi * sphi, -cpsi * sphi, cphi),
+      u: new THREE.Vector3(1, 0, 0).applyMatrix4(M),
+      w: new THREE.Vector3(0, 1, 0).applyMatrix4(M),
+      d: new THREE.Vector3(0, 0, 1).applyMatrix4(M),
       r: b.r,
     };
   }
@@ -1054,6 +1059,22 @@
       color: "var(--cyan)",
       dy: 42,
     });
+
+    // Crisp edge of each opening ON the wall — ties the hole to the branch
+    // rims (otherwise only the far wall is visible through the opening).
+    for (const h of m.holes) {
+      const pts = h.pts.map((p) => {
+        const alpha = p.u / r1;
+        return new THREE.Vector3(r1 * Math.cos(alpha), p.v, -r1 * Math.sin(alpha));
+      });
+      const geom = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineBasicMaterial({
+        color: pal.mainRing,
+        transparent: true,
+        opacity: 0.95,
+      });
+      solidsGroup.add(h.closed ? new THREE.LineLoop(geom, mat) : new THREE.Line(geom, mat));
+    }
 
     const curveMat = () =>
       new THREE.MeshStandardMaterial({

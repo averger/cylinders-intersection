@@ -28,7 +28,7 @@
         ? "cylindre × cylindre"
         : p.mode === "cyl_plane"
           ? "cylindre × plan"
-          : "châssis · nœud multi-piquages"}
+          : "multi tube · nœud de piquages"}
     </span>
     <span>Ø₁ {p.d1.toFixed(1)}</span>
     {#if p.mode === "cyl_cyl"}<span>Ø₂ {p.d2.toFixed(1)}</span>{/if}

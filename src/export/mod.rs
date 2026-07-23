@@ -635,6 +635,8 @@ mod tests {
     fn multi_node_produces_main_sheet_with_holes_plus_branch_sheets() {
         use crate::multi::{MultiBranchSpec, MultiInput};
         let mut d = doc();
+        // Opposite azimuths: two openings that stay disjoint (an overlapping
+        // pair would be merged into a single envelope contour upstream).
         d.source = SourceSpec::Multi(MultiInput {
             r1: 40.0,
             branches: vec![
@@ -643,7 +645,7 @@ mod tests {
                     r: 25.0,
                     z: 45.0,
                     phi: std::f64::consts::PI - std::f64::consts::FRAC_PI_4,
-                    psi: 0.0,
+                    psi: std::f64::consts::PI,
                 },
             ],
             n_samples: 720,
