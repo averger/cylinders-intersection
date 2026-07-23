@@ -1,6 +1,7 @@
 <script lang="ts">
-  // Compact tool header: brand, view toggle, actions.
+  // Compact tool header: brand, view toggle, options, actions.
   import Segmented from "./Segmented.svelte";
+  import OptionsMenu from "./OptionsMenu.svelte";
   import { store, type View } from "../lib/store.svelte";
   import { editor } from "../lib/editor.svelte";
 
@@ -57,8 +58,9 @@
       </div>
     </a>
 
-    <div class="mx-auto">
+    <div class="mx-auto flex items-center gap-2">
       <Segmented options={viewOptions} value={store.view} onchange={(v) => store.setView(v)} />
+      <OptionsMenu />
     </div>
 
     <div class="flex items-center gap-2 shrink-0">
