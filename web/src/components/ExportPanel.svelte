@@ -6,13 +6,9 @@
 </script>
 
 <div class="flex flex-col gap-5">
-  <section class="space-y-2">
-    <span class="text-[10px] uppercase tracking-[0.18em] text-ash">Annotations</span>
-    {#if editor.annotations.length === 0}
-      <p class="text-[11px] text-ash/70">
-        Double-cliquez sur une mise à plat pour placer un repère texte.
-      </p>
-    {:else}
+  {#if editor.annotations.length > 0}
+    <section class="space-y-2">
+      <span class="text-[10px] uppercase tracking-[0.18em] text-ash">Annotations</span>
       <ul class="space-y-1.5">
         {#each editor.annotations as a, index (index)}
           <li class="flex items-center gap-1.5">
@@ -45,8 +41,8 @@
           </li>
         {/each}
       </ul>
-    {/if}
-  </section>
+    </section>
+  {/if}
 
   {#if editor.error}
     <p class="text-[12px] text-ember">{editor.error}</p>
