@@ -55,11 +55,12 @@ export interface Study {
   editor: EditorState;
 }
 
-/** Default node: a V of two Ø 60 tubes meeting above the main tube. */
+/** Default node: a V of two Ø 60 tubes whose axes cross INSIDE the main
+ * tube — both land on the wall and kiss each other along a mutual seam. */
 export function defaultBranches(): BranchParam[] {
   return [
-    { d: 60, z: -55, angleDeg: 45, azimutDeg: 0 },
-    { d: 60, z: 55, angleDeg: 135, azimutDeg: 0 },
+    { d: 60, z: -40, angleDeg: 45, azimutDeg: 0 },
+    { d: 60, z: 40, angleDeg: 135, azimutDeg: 0 },
   ];
 }
 

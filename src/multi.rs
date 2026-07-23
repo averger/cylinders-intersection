@@ -162,57 +162,28 @@ pub fn multi(input: &MultiInput) -> MultiPayload {
     let tau = std::f64::consts::TAU;
     let frames: Vec<BranchFrame> = input.branches.iter().map(BranchFrame::new).collect();
 
-    // --- Pass 1: first-contact cuts WITHOUT material verification. --------
-    // Gives each branch an approximate cut profile t⁰(θ) used below to
-    // decide whether a neighbour actually still has material at a contact.
-    let pass1: Vec<Vec<f64>> = frames
+    // Axial floor of each branch: the lowest wall-entry of its generatrices.
+    // Below its floor a tube certainly has no material (it would be beyond
+    // the far side of the main tube) — contacts there are phantoms of the
+    // infinite cylinder.  Above it, the workshop convention applies: each
+    // tube is cut on the FULL cylinder surface of its neighbours, so the
+    // walls kiss along the seam and never cross inside the joint.
+    let floors: Vec<f64> = frames
         .iter()
-        .enumerate()
-        .map(|(i, f)| {
+        .map(|f| {
             (0..n)
-                .map(|k| {
-                    let base = f.base(tau * (k as f64) / (n as f64));
-                    let Some(mut t) = entry_into_main(&base, &f.d, r1) else {
-                        return f64::NAN;
-                    };
-                    for (j, other) in frames.iter().enumerate() {
-                        if j == i {
-                            continue;
-                        }
-                        if let Some(t_j) = entry_into_branch(&base, &f.d, other) {
-                            if t_j > t {
-                                let p = base + t_j * f.d;
-                                if p.x * p.x + p.y * p.y >= r1 * r1 * (1.0 - 1e-9) {
-                                    t = t_j;
-                                }
-                            }
-                        }
-                    }
-                    t
+                .filter_map(|k| {
+                    entry_into_main(&f.base(tau * (k as f64) / (n as f64)), &f.d, r1)
                 })
-                .collect()
+                .fold(f64::INFINITY, f64::min)
         })
         .collect();
-
-    // A contact with branch `j` only counts if `j` still HAS material
-    // there: the contact's axial coordinate on `j` must lie beyond `j`'s
-    // own cut at that angle (otherwise we would cut against a phantom).
-    let material_exists = |j: usize, p: &Vector3<f64>| -> bool {
+    let above_floor = |j: usize, p: &Vector3<f64>| -> bool {
         let fr = &frames[j];
-        let rel = p - fr.c;
-        let s = rel.dot(&fr.d);
-        let theta_j = rel.dot(&fr.w).atan2(rel.dot(&fr.u)).rem_euclid(tau);
-        let pos = theta_j / (tau / n as f64);
-        let k0 = (pos.floor() as usize) % n;
-        let k1 = (k0 + 1) % n;
-        let (a, b) = (pass1[j][k0], pass1[j][k1]);
-        if !a.is_finite() || !b.is_finite() {
-            return true;
-        }
-        s >= a + (b - a) * (pos - pos.floor()) - 1e-6
+        (p - fr.c).dot(&fr.d) >= floors[j] - 1e-6
     };
 
-    // --- Pass 2: final cuts, neighbour contacts verified. -----------------
+    // --- First-contact cuts. ----------------------------------------------
     let mut branches = Vec::with_capacity(frames.len());
     let mut neighbor_pairs: Vec<(usize, usize)> = Vec::new();
 
@@ -234,11 +205,11 @@ pub fn multi(input: &MultiInput) -> MultiPayload {
                 }
                 if let Some(t_j) = entry_into_branch(&base, &f.d, other) {
                     if t_j > t_cut {
-                        // Only material outside the main tube can stop us —
-                        // and only where the neighbour actually reaches.
+                        // A neighbour contact only counts outside the main
+                        // tube and above the neighbour's axial floor.
                         let p = base + t_j * f.d;
                         if p.x * p.x + p.y * p.y >= r1 * r1 * (1.0 - 1e-9)
-                            && material_exists(j, &p)
+                            && above_floor(j, &p)
                         {
                             t_cut = t_j;
                             cut_by_neighbor = true;
@@ -686,6 +657,68 @@ mod tests {
         });
         assert_eq!(res.holes.len(), 2);
         assert!(res.warnings.is_empty());
+    }
+
+    /// Distance from a point to a closed polyline (segment-wise).
+    fn dist_to_polyline(u: f64, v: f64, pts: &[DevPoint]) -> f64 {
+        let n = pts.len();
+        let mut best = f64::INFINITY;
+        for i in 0..n {
+            let a = &pts[i];
+            let b = &pts[(i + 1) % n];
+            let (dx, dy) = (b.u - a.u, b.v - a.v);
+            let len2 = dx * dx + dy * dy;
+            let t = if len2 > 0.0 {
+                (((u - a.u) * dx + (v - a.v) * dy) / len2).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            let (px, py) = (a.u + t * dx, a.v + t * dy);
+            best = best.min((u - px).hypot(v - py));
+        }
+        best
+    }
+
+    #[test]
+    fn rim_on_main_lies_on_the_envelope_contour() {
+        // What the eye checks in the 3D view: where a branch lands on the
+        // main tube, its rim must sit ON the opening contour of the main
+        // sheet — no wall may land inside the cut-away region.
+        // Sane V-node: axes crossing INSIDE the main tube (|z| < r1/tanφ·…),
+        // so both tubes land on the wall around their mutual seam.
+        let phi = std::f64::consts::FRAC_PI_4;
+        let node = multi(&MultiInput {
+            r1: 50.0,
+            branches: vec![
+                MultiBranchSpec { r: 30.0, z: -40.0, phi, psi: 0.0 },
+                MultiBranchSpec { r: 30.0, z: 40.0, phi: std::f64::consts::PI - phi, psi: 0.0 },
+            ],
+            n_samples: 720,
+        });
+        assert_eq!(node.holes.len(), 1, "les deux lumières fusionnent en enveloppe");
+        let env = &node.holes[0].pts;
+        for br in &node.branches {
+            let mut checked = 0usize;
+            let mut far = 0usize;
+            for p in &br.curve3d {
+                let dist_main = (p.x * p.x + p.y * p.y).sqrt();
+                if (dist_main - 50.0).abs() > 1e-6 {
+                    continue; // seam point, off the wall
+                }
+                let u = 50.0 * p.y.atan2(p.x);
+                if dist_to_polyline(u, p.z, env) > 0.05 {
+                    far += 1;
+                }
+                checked += 1;
+            }
+            assert!(checked > 100, "trop peu de points de rive sur le tube ({checked})");
+            // Tolerate a handful of crotch landings inside the envelope
+            // (wall already cut away by the neighbour's bore right there).
+            assert!(
+                far * 20 < checked,
+                "{far}/{checked} points de rive hors du contour d'enveloppe"
+            );
+        }
     }
 
     #[test]
