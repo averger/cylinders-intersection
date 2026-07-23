@@ -51,7 +51,9 @@
         value={p.d1}
         decimals={2}
         onchange={(v) => {
-          store.params = { ...store.params, d1: v };
+          // Un piquage plus gros que le tube principal traverse de part en
+          // part : hors du domaine gueule de loup — on borne Ø₂ à Ø₁.
+          store.params = { ...store.params, d1: v, d2: Math.min(store.params.d2, v) };
           store.compute();
         }}
       />
@@ -60,9 +62,10 @@
           label="Diamètre Ø₂ (cylindre incliné)"
           unit="mm"
           min={5}
-          max={500}
+          max={p.d1}
           step={0.5}
           value={p.d2}
+          hint="au plus égal à Ø₁"
           decimals={2}
           onchange={(v) => {
             store.params = { ...store.params, d2: v };

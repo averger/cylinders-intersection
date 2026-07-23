@@ -100,12 +100,17 @@ function load(): PersistShape | null {
     const data = JSON.parse(raw) as PersistShape;
     if (!Array.isArray(data.studies) || data.studies.length === 0) return null;
     // Merge with defaults so older payloads gain new fields gracefully.
-    data.studies = data.studies.map((s) => ({
-      id: s.id ?? newId(),
-      name: s.name ?? "Étude",
-      params: { ...DEFAULT_PARAMS, ...s.params },
-      editor: { ...defaultEditor(), ...s.editor },
-    }));
+    data.studies = data.studies.map((s) => {
+      const params = { ...DEFAULT_PARAMS, ...s.params };
+      // Le domaine gueule de loup impose Ø₂ ≤ Ø₁.
+      params.d2 = Math.min(params.d2, params.d1);
+      return {
+        id: s.id ?? newId(),
+        name: s.name ?? "Étude",
+        params,
+        editor: { ...defaultEditor(), ...s.editor },
+      };
+    });
     return data;
   } catch {
     return null;
