@@ -7,10 +7,11 @@
 
   let exportMenu = $state(false);
 
-  function pick(kind: "pdf" | "dxf") {
+  function pick(kind: "pdf" | "dxf" | "stl") {
     exportMenu = false;
     if (kind === "pdf") editor.exportPdf();
-    else editor.exportDxf();
+    else if (kind === "dxf") editor.exportDxf();
+    else editor.exportStl();
   }
 
   function clickOutside(node: HTMLElement) {
@@ -139,6 +140,16 @@
               <div class="text-[13.5px] font-medium text-pearl">DXF · CAO / CNC</div>
               <div class="text-[11px] text-ash leading-snug mt-0.5">
                 R12 en mm, calques CUT / FRAME / AXIS — laser, plasma, CAO.
+              </div>
+            </button>
+            <button
+              class="w-full text-left px-3.5 py-2.5 rounded-xl hover:bg-carbon transition-colors"
+              role="menuitem"
+              onclick={() => pick("stl")}
+            >
+              <div class="text-[13.5px] font-medium text-pearl">STL · maquette 3D</div>
+              <div class="text-[11px] text-ash leading-snug mt-0.5">
+                Surfaces exactes en mm — Fusion 360, FreeCAD, impression 3D.
               </div>
             </button>
           </div>

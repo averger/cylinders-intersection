@@ -159,8 +159,60 @@ fn entry_into_branch(b: &Vector3<f64>, d: &Vector3<f64>, other: &BranchFrame) ->
 pub fn multi(input: &MultiInput) -> MultiPayload {
     let n = input.n_samples.max(64);
     let r1 = input.r1;
+    let tau = std::f64::consts::TAU;
     let frames: Vec<BranchFrame> = input.branches.iter().map(BranchFrame::new).collect();
 
+    // --- Pass 1: first-contact cuts WITHOUT material verification. --------
+    // Gives each branch an approximate cut profile t⁰(θ) used below to
+    // decide whether a neighbour actually still has material at a contact.
+    let pass1: Vec<Vec<f64>> = frames
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            (0..n)
+                .map(|k| {
+                    let base = f.base(tau * (k as f64) / (n as f64));
+                    let Some(mut t) = entry_into_main(&base, &f.d, r1) else {
+                        return f64::NAN;
+                    };
+                    for (j, other) in frames.iter().enumerate() {
+                        if j == i {
+                            continue;
+                        }
+                        if let Some(t_j) = entry_into_branch(&base, &f.d, other) {
+                            if t_j > t {
+                                let p = base + t_j * f.d;
+                                if p.x * p.x + p.y * p.y >= r1 * r1 * (1.0 - 1e-9) {
+                                    t = t_j;
+                                }
+                            }
+                        }
+                    }
+                    t
+                })
+                .collect()
+        })
+        .collect();
+
+    // A contact with branch `j` only counts if `j` still HAS material
+    // there: the contact's axial coordinate on `j` must lie beyond `j`'s
+    // own cut at that angle (otherwise we would cut against a phantom).
+    let material_exists = |j: usize, p: &Vector3<f64>| -> bool {
+        let fr = &frames[j];
+        let rel = p - fr.c;
+        let s = rel.dot(&fr.d);
+        let theta_j = rel.dot(&fr.w).atan2(rel.dot(&fr.u)).rem_euclid(tau);
+        let pos = theta_j / (tau / n as f64);
+        let k0 = (pos.floor() as usize) % n;
+        let k1 = (k0 + 1) % n;
+        let (a, b) = (pass1[j][k0], pass1[j][k1]);
+        if !a.is_finite() || !b.is_finite() {
+            return true;
+        }
+        s >= a + (b - a) * (pos - pos.floor()) - 1e-6
+    };
+
+    // --- Pass 2: final cuts, neighbour contacts verified. -----------------
     let mut branches = Vec::with_capacity(frames.len());
     let mut neighbor_pairs: Vec<(usize, usize)> = Vec::new();
 
@@ -170,7 +222,7 @@ pub fn multi(input: &MultiInput) -> MultiPayload {
         let mut cut_by_neighbor = false;
 
         for k in 0..n {
-            let theta = std::f64::consts::TAU * (k as f64) / (n as f64);
+            let theta = tau * (k as f64) / (n as f64);
             let base = f.base(theta);
             let Some(mut t_cut) = entry_into_main(&base, &f.d, r1) else {
                 continue;
@@ -182,9 +234,12 @@ pub fn multi(input: &MultiInput) -> MultiPayload {
                 }
                 if let Some(t_j) = entry_into_branch(&base, &f.d, other) {
                     if t_j > t_cut {
-                        // Only material outside the main tube can stop us.
+                        // Only material outside the main tube can stop us —
+                        // and only where the neighbour actually reaches.
                         let p = base + t_j * f.d;
-                        if p.x * p.x + p.y * p.y >= r1 * r1 * (1.0 - 1e-9) {
+                        if p.x * p.x + p.y * p.y >= r1 * r1 * (1.0 - 1e-9)
+                            && material_exists(j, &p)
+                        {
                             t_cut = t_j;
                             cut_by_neighbor = true;
                             if !neighbor_pairs.contains(&(i.min(j), i.max(j))) {

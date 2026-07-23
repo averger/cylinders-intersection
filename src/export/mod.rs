@@ -7,9 +7,11 @@
 
 mod dxf;
 mod pdf;
+mod stl;
 
 pub use dxf::render_dxf;
 pub use pdf::render_pdf;
+pub use stl::render_stl;
 
 use serde::Deserialize;
 

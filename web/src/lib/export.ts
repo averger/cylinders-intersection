@@ -148,4 +148,7 @@ export const exportApi = {
   async dxf(doc: ExportDocument, filename = "gabarits.dxf") {
     saveBlob(filename, await postForBlob("/api/export/dxf", doc));
   },
+  async stl(doc: ExportDocument, filename = "maquette.stl") {
+    saveBlob(filename, await postForBlob("/api/export/stl", doc));
+  },
 };

@@ -172,10 +172,14 @@ interface **Svelte 5 + Tailwind 4** servie en SPA, vue 3D **Three.js**.
   porte du trait de coupe. L'aperçu 2D affiche exactement les tuiles émises.
 * Export **DXF R12** (calques `CUT` / `FRAME` / `AXIS` / `TEXT` / `ANNOT`, mm)
   pour AutoCAD, QCAD, LibreCAD et chaînes CAM laser/plasma.
+* Export **STL binaire** (mm) : la maquette 3D exacte de l'assemblage —
+  tube principal percé de ses lumières, piquages coupés (coutures mutuelles
+  comprises), sifflet tronqué — maillée depuis les mêmes formules fermées
+  que les gabarits. À importer dans **Fusion 360** / FreeCAD.
 * Export **SVG 1:1** par mise à plat, impression navigateur 1:1.
 
-**Feuille de route** : export **G-code** direct, union booléenne des lumières
-qui se chevauchent.
+**Feuille de route** : épaisseur de paroi paramétrable dans l'export STL
+(solides fermés).
 
 ### 2.1 Pré-requis
 

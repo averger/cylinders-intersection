@@ -13,7 +13,7 @@ use axum::{
 use serde::Serialize;
 
 use crate::assets::Assets;
-use crate::export::{render_dxf, render_pdf, ExportDocument, ExportError};
+use crate::export::{render_dxf, render_pdf, render_stl, ExportDocument, ExportError};
 use crate::intersection::{cyl_cyl, cyl_plane, CylCylInput, CylPlaneInput, IntersectionPayload};
 use crate::multi::{multi, MultiInput, MultiPayload};
 
@@ -52,6 +52,7 @@ pub fn router() -> Router {
         .route("/api/intersect/multi", post(api_multi))
         .route("/api/export/pdf", post(api_export_pdf))
         .route("/api/export/dxf", post(api_export_dxf))
+        .route("/api/export/stl", post(api_export_stl))
         .fallback(static_fallback)
         .with_state(state)
 }
@@ -142,6 +143,22 @@ async fn api_export_dxf(Json(doc): Json<ExportDocument>) -> Result<Response, Api
             ),
         ],
         dxf,
+    )
+        .into_response())
+}
+
+async fn api_export_stl(Json(doc): Json<ExportDocument>) -> Result<Response, ApiError> {
+    let bytes = render_stl(&doc).map_err(ApiError::from)?;
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "model/stl".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                "attachment; filename=\"maquette.stl\"".to_string(),
+            ),
+        ],
+        bytes,
     )
         .into_response())
 }

@@ -21,7 +21,7 @@ import {
 class EditorStore {
   /** UI-only state (not persisted per study). */
   selected = $state<number | null>(null);
-  busy = $state<null | "pdf" | "dxf">(null);
+  busy = $state<null | "pdf" | "dxf" | "stl">(null);
   error = $state<string | null>(null);
 
   // ----- persisted, per active study --------------------------------------
@@ -277,7 +277,11 @@ class EditorStore {
     await this.run("dxf", () => exportApi.dxf(this.document(), `cylix-${slug()}.dxf`));
   }
 
-  private async run(kind: "pdf" | "dxf", fn: () => Promise<void>) {
+  async exportStl() {
+    await this.run("stl", () => exportApi.stl(this.document(), `cylix-${slug()}.stl`));
+  }
+
+  private async run(kind: "pdf" | "dxf" | "stl", fn: () => Promise<void>) {
     this.busy = kind;
     this.error = null;
     try {
