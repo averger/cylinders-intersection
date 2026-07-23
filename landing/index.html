@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cylix — gabarits de découpe de tubes à l'échelle 1:1</title>
+  <meta name="description" content="Cylix calcule les développés d'intersections de cylindres — gueule de loup, piquage incliné, coupe en sifflet — et exporte les gabarits en PDF 1:1 et DXF. Inscrivez-vous pour être prévenu du lancement." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%20fill%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23FF7A33%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23E8500F%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2296%22%20height%3D%2296%22%20rx%3D%2224%22%20fill%3D%22%2316161A%22%2F%3E%3Cpath%20d%3D%22M16.0%2048.0%20L17.8%2045.0%20L19.6%2042.2%20L21.3%2039.5%20L23.1%2037.1%20L24.9%2035.0%20L26.7%2033.3%20L28.4%2032.0%20L30.2%2031.3%20L32.0%2031.0%20L33.8%2031.3%20L35.6%2032.0%20L37.3%2033.3%20L39.1%2035.0%20L40.9%2037.1%20L42.7%2039.5%20L44.4%2042.2%20L46.2%2045.0%20L48.0%2048.0%20L49.8%2051.0%20L51.6%2053.8%20L53.3%2056.5%20L55.1%2058.9%20L56.9%2061.0%20L58.7%2062.7%20L60.4%2064.0%20L62.2%2064.7%20L64.0%2065.0%20L65.8%2064.7%20L67.6%2064.0%20L69.3%2062.7%20L71.1%2061.0%20L72.9%2058.9%20L74.7%2056.5%20L76.4%2053.8%20L78.2%2051.0%20L80.0%2048.0%22%20stroke%3D%22url%28%23g%29%22%20stroke-width%3D%2210%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E" />
+  <style>
+    :root {
+      --bg: #f2f2f0;
+      --bg-2: #ffffff;
+      --text: #1b1b1d;
+      --text-2: #4a4a50;
+      --text-3: #82828a;
+      --line: rgba(20, 20, 25, 0.09);
+      --line-2: rgba(20, 20, 25, 0.16);
+      --ember: #e04c0d;
+      --ember-soft: #ff6a26;
+      --cyan: #0b85b8;
+      --input-bg: rgba(20, 20, 25, 0.04);
+      --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 10px 30px -18px rgba(20, 20, 25, 0.25);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    .num { font-variant-numeric: tabular-nums; }
+
+    /* Ambient glows, same spirit as the app */
+    .ambient {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background:
+        radial-gradient(720px 420px at 82% -10%, rgba(224, 76, 13, 0.07), transparent 65%),
+        radial-gradient(640px 420px at 8% 30%, rgba(11, 133, 184, 0.06), transparent 65%);
+    }
+
+    .wrap { position: relative; z-index: 1; max-width: 1060px; margin: 0 auto; padding: 0 24px; }
+
+    /* Header */
+    header { padding: 22px 0; display: flex; align-items: center; justify-content: space-between; }
+    .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
+    .brand svg { width: 36px; height: 36px; border-radius: 10px; }
+    .brand-name { font-weight: 650; letter-spacing: -0.01em; font-size: 16px; }
+    .brand-sub { font-size: 9px; text-transform: uppercase; letter-spacing: 0.22em; color: var(--text-3); }
+    .pill {
+      font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text-2); border: 1px solid var(--line-2); border-radius: 999px;
+      padding: 6px 14px; background: var(--bg-2);
+    }
+    .pill b { color: var(--ember); font-weight: 600; }
+
+    /* Hero */
+    .hero { padding: 76px 0 40px; text-align: center; }
+    h1 {
+      font-size: clamp(34px, 5.4vw, 58px); line-height: 1.06; letter-spacing: -0.028em;
+      font-weight: 700; max-width: 17em; margin: 0 auto;
+    }
+    h1 .accent {
+      background: linear-gradient(120deg, var(--ember-soft), var(--ember));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .lede {
+      margin: 22px auto 0; max-width: 40em; font-size: 17px; line-height: 1.65; color: var(--text-2);
+    }
+
+    /* Signup form */
+    .signup { margin: 36px auto 10px; max-width: 460px; }
+    .signup form { display: flex; gap: 10px; }
+    .signup input[type="email"] {
+      flex: 1; min-width: 0; height: 48px; padding: 0 16px; font-size: 15px;
+      color: var(--text); background: var(--bg-2);
+      border: 1px solid var(--line-2); border-radius: 12px; outline: none;
+      transition: border-color 160ms ease, box-shadow 160ms ease;
+    }
+    .signup input[type="email"]::placeholder { color: var(--text-3); }
+    .signup input[type="email"]:focus {
+      border-color: color-mix(in srgb, var(--ember) 55%, transparent);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--ember) 14%, transparent);
+    }
+    .signup button {
+      height: 48px; padding: 0 22px; border: 0; border-radius: 12px; cursor: pointer;
+      font-size: 14px; font-weight: 600; letter-spacing: 0.01em; color: #fff;
+      background: linear-gradient(180deg, var(--ember-soft), var(--ember));
+      box-shadow: 0 12px 30px -12px color-mix(in srgb, var(--ember) 65%, transparent);
+      transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), filter 160ms ease;
+      white-space: nowrap;
+    }
+    .signup button:hover { filter: brightness(1.05); transform: translateY(-1px); }
+    .signup button:active { transform: translateY(0); }
+    .signup button:disabled { opacity: 0.6; cursor: default; transform: none; }
+    .signup .note { margin-top: 12px; font-size: 12px; color: var(--text-3); }
+    .signup .msg { margin-top: 12px; font-size: 13px; display: none; }
+    .signup .msg.ok { display: block; color: #1a7f37; }
+    .signup .msg.err { display: block; color: var(--ember); }
+
+    /* Screenshot */
+    .shot { margin: 56px auto 0; }
+    .shot figure {
+      border: 1px solid var(--line-2); border-radius: 18px; overflow: hidden;
+      background: var(--bg-2); box-shadow: var(--shadow-card);
+    }
+    .shot img { display: block; width: 100%; height: auto; }
+    .shot figcaption { padding: 10px 16px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); border-top: 1px solid var(--line); }
+
+    /* Features */
+    .features {
+      padding: 72px 0 8px; display: grid; gap: 18px;
+      grid-template-columns: repeat(3, 1fr);
+    }
+    @media (max-width: 760px) { .features { grid-template-columns: 1fr; } .signup form { flex-direction: column; } }
+    .card {
+      background: var(--bg-2); border: 1px solid var(--line); border-radius: 16px;
+      padding: 22px; box-shadow: var(--shadow-card);
+    }
+    .card .k {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--ember);
+      font-weight: 600;
+    }
+    .card h3 { margin: 10px 0 8px; font-size: 16px; letter-spacing: -0.01em; font-weight: 650; }
+    .card p { font-size: 13.5px; line-height: 1.65; color: var(--text-2); }
+    .card code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 12px; background: var(--input-bg); border-radius: 6px; padding: 1px 6px;
+    }
+
+    /* Proof strip */
+    .proof {
+      margin: 56px 0 0; display: flex; justify-content: center; gap: 40px; flex-wrap: wrap;
+      padding: 26px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    }
+    .proof div { text-align: center; }
+    .proof .v { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; }
+    .proof .l { margin-top: 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-3); }
+
+    /* Second shot + closing CTA */
+    .closing { text-align: center; padding: 72px 0 24px; }
+    .closing h2 { font-size: clamp(24px, 3.4vw, 34px); letter-spacing: -0.02em; font-weight: 700; }
+    .closing p { margin: 14px auto 0; max-width: 36em; color: var(--text-2); font-size: 15px; line-height: 1.65; }
+
+    footer {
+      padding: 40px 0 48px; display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; flex-wrap: wrap; color: var(--text-3); font-size: 12px;
+    }
+    footer .fbrand { display: flex; align-items: center; gap: 8px; }
+    footer svg { width: 20px; height: 20px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <div class="ambient"></div>
+
+  <div class="wrap">
+    <header>
+      <a class="brand" href="#">
+        <svg viewBox="0 0 96 96" fill="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="mg" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#FF7A33" />
+              <stop offset="1" stop-color="#E8500F" />
+            </linearGradient>
+          </defs>
+          <rect width="96" height="96" rx="24" fill="#16161A" />
+          <path d="M16.0 48.0 L17.8 45.0 L19.6 42.2 L21.3 39.5 L23.1 37.1 L24.9 35.0 L26.7 33.3 L28.4 32.0 L30.2 31.3 L32.0 31.0 L33.8 31.3 L35.6 32.0 L37.3 33.3 L39.1 35.0 L40.9 37.1 L42.7 39.5 L44.4 42.2 L46.2 45.0 L48.0 48.0 L49.8 51.0 L51.6 53.8 L53.3 56.5 L55.1 58.9 L56.9 61.0 L58.7 62.7 L60.4 64.0 L62.2 64.7 L64.0 65.0 L65.8 64.7 L67.6 64.0 L69.3 62.7 L71.1 61.0 L72.9 58.9 L74.7 56.5 L76.4 53.8 L78.2 51.0 L80.0 48.0"
+            stroke="url(#mg)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span>
+          <span class="brand-name">Cylix</span><br />
+          <span class="brand-sub">gabarits de découpe · échelle 1:1</span>
+        </span>
+      </a>
+      <span class="pill"><b>●</b>&nbsp; Bientôt disponible</span>
+    </header>
+
+    <section class="hero">
+      <h1>Gueule de loup, piquage, sifflet.<br /><span class="accent">Tracés justes, à l'échelle 1:1.</span></h1>
+      <p class="lede">
+        Cylix calcule les développés d'intersections de cylindres par formules fermées,
+        sans approximation. Deux gabarits par intersection — le tube sécant et la lumière
+        à percer — exportés en PDF à l'échelle 1:1 ou en DXF pour la découpe plasma.
+      </p>
+
+      <div class="signup">
+        <!-- Remplacer data-endpoint par votre endpoint Formspree / Buttondown / API. -->
+        <form id="waitlist" data-endpoint="https://formspree.io/f/REMPLACER_MOI" novalidate>
+          <input type="email" name="email" required placeholder="votre@email.fr"
+            autocomplete="email" inputmode="email" aria-label="Adresse e-mail" />
+          <button type="submit">Être prévenu du lancement</button>
+        </form>
+        <p class="note">Un seul e-mail, au lancement. Pas de spam, désinscription en un clic.</p>
+        <p class="msg" id="msg" role="status"></p>
+      </div>
+
+      <div class="shot">
+        <figure>
+          <img src="app-3d.png" alt="Cylix — vue 3D d'une intersection de cylindres, cotée et annotée" width="1920" height="1080" loading="eager" />
+          <figcaption>Vue 3D — les cylindres s'arrêtent exactement à l'intersection</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="features">
+      <div class="card">
+        <span class="k">Exact</span>
+        <h3>Formules fermées, vérifiées</h3>
+        <p>
+          Pas de solveur numérique : l'intersection est résolue génératrice par génératrice,
+          en formules fermées. Chaque équation de la théorie est vérifiée mécaniquement —
+          26 contrôles symboliques et numériques, publiés avec le code.
+        </p>
+      </div>
+      <div class="card">
+        <span class="k">Atelier</span>
+        <h3>PDF 1:1 et DXF</h3>
+        <p>
+          Le PDF sort à l'échelle 1:1, tuilé sur A4/A3/A2 avec repères de collage et règle
+          de contrôle : on imprime, on enroule sur le tube, on coupe. Le DXF est organisé
+          par calques (<code>CUT</code>, <code>REF</code>…) pour la découpe plasma ou laser.
+        </p>
+      </div>
+      <div class="card">
+        <span class="k">Alignement</span>
+        <h3>Repères sur chaque gabarit</h3>
+        <p>
+          Génératrices vraies, génératrice de référence 0° et tics d'alignement tracés sur
+          les gabarits comme sur la pièce. Mode plan incliné à deux basculements pour les
+          coupes d'onglet composées.
+        </p>
+      </div>
+    </section>
+
+    <div class="proof">
+      <div><div class="v num">1:1</div><div class="l">échelle d'export</div></div>
+      <div><div class="v num">&lt; 0,01 mm</div><div class="l">erreur bornée</div></div>
+      <div><div class="v num">26</div><div class="l">contrôles de vérification</div></div>
+      <div><div class="v">Rust</div><div class="l">moteur de calcul</div></div>
+    </div>
+
+    <section class="closing">
+      <h2>Du paramètre au gabarit, en secondes.</h2>
+      <p>
+        Deux diamètres, un angle : Cylix trace les deux mises à plat, prêtes à découper.
+        Laissez votre e-mail — vous serez prévenu au lancement.
+      </p>
+      <div class="signup">
+        <form class="waitlist-2" data-endpoint="https://formspree.io/f/REMPLACER_MOI" novalidate>
+          <input type="email" name="email" required placeholder="votre@email.fr"
+            autocomplete="email" inputmode="email" aria-label="Adresse e-mail" />
+          <button type="submit">S'inscrire</button>
+        </form>
+        <p class="msg" role="status"></p>
+      </div>
+      <div class="shot">
+        <figure>
+          <img src="app-2d.png" alt="Cylix — les deux développés (gabarit du tube sécant et gueule de loup) avec repères d'alignement" width="1920" height="1080" loading="lazy" />
+          <figcaption>Les deux développés, repères d'alignement compris</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <footer>
+      <span class="fbrand">
+        <svg viewBox="0 0 96 96" fill="none" aria-hidden="true">
+          <rect width="96" height="96" rx="24" fill="#16161A" />
+          <path d="M16.0 48.0 L24.9 35.0 L32.0 31.0 L39.1 35.0 L48.0 48.0 L56.9 61.0 L64.0 65.0 L71.1 61.0 L80.0 48.0"
+            stroke="#E8500F" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        Cylix — moteur de calcul Rust · exports PDF 1:1 &amp; DXF
+      </span>
+      <span>© 2026 · <a href="mailto:contact@cylix.app" style="color:inherit">contact</a></span>
+    </footer>
+  </div>
+
+  <script>
+    // Progressive enhancement: AJAX submit to the configured endpoint
+    // (Formspree-compatible: POST JSON { email }).
+    for (const form of document.querySelectorAll("form[data-endpoint]")) {
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const msg = form.parentElement.querySelector(".msg");
+        const input = form.querySelector("input[type=email]");
+        const btn = form.querySelector("button");
+        const email = input.value.trim();
+        msg.className = "msg";
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          msg.textContent = "Adresse e-mail invalide.";
+          msg.classList.add("err");
+          return;
+        }
+        const endpoint = form.dataset.endpoint;
+        if (endpoint.includes("REMPLACER_MOI")) {
+          msg.textContent = "Formulaire pas encore branché — configurez l'endpoint dans index.html.";
+          msg.classList.add("err");
+          return;
+        }
+        btn.disabled = true;
+        try {
+          const r = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ email }),
+          });
+          if (!r.ok) throw new Error(String(r.status));
+          form.reset();
+          msg.textContent = "C'est noté — vous serez prévenu au lancement.";
+          msg.classList.add("ok");
+        } catch {
+          msg.textContent = "Échec de l'envoi. Réessayez dans un instant.";
+          msg.classList.add("err");
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    }
+  </script>
+</body>
+</html>
