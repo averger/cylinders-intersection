@@ -47,18 +47,18 @@
     .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
     .brand svg { width: 36px; height: 36px; border-radius: 10px; }
     .brand-name { font-weight: 650; letter-spacing: -0.01em; font-size: 16px; }
-    .brand-sub { font-size: 9px; text-transform: uppercase; letter-spacing: 0.22em; color: var(--text-3); }
+    .brand-sub { font-size: 9px; text-transform: uppercase; letter-spacing: 0.22em; color: var(--text-3); white-space: nowrap; }
     .pill {
       font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
       color: var(--text-2); border: 1px solid var(--line-2); border-radius: 999px;
-      padding: 6px 14px; background: var(--bg-2);
+      padding: 6px 14px; background: var(--bg-2); white-space: nowrap;
     }
     .pill b { color: var(--ember); font-weight: 600; }
 
     /* Hero */
     .hero { padding: 76px 0 40px; text-align: center; }
     h1 {
-      font-size: clamp(34px, 5.4vw, 58px); line-height: 1.06; letter-spacing: -0.028em;
+      font-size: clamp(31px, 5.4vw, 58px); line-height: 1.06; letter-spacing: -0.028em;
       font-weight: 700; max-width: 17em; margin: 0 auto;
     }
     h1 .accent {
@@ -114,6 +114,26 @@
       grid-template-columns: repeat(3, 1fr);
     }
     @media (max-width: 760px) { .features { grid-template-columns: 1fr; } .signup form { flex-direction: column; } }
+
+    /* Small screens */
+    @media (max-width: 560px) {
+      .wrap { padding: 0 18px; }
+      header { padding: 16px 0; }
+      .pill { display: none; }
+      .hero { padding: 44px 0 28px; }
+      .lede { font-size: 15px; margin-top: 16px; }
+      .signup { margin-top: 28px; }
+      .signup input[type="email"], .signup button { height: 50px; }
+      .shot { margin-top: 40px; }
+      .shot figure { border-radius: 14px; }
+      .shot figcaption { font-size: 10px; padding: 8px 12px; }
+      .features { padding: 52px 0 4px; gap: 14px; }
+      .card { padding: 18px; }
+      .proof { margin-top: 40px; padding: 20px 0; gap: 18px 32px; }
+      .proof .v { font-size: 19px; }
+      .closing { padding: 52px 0 12px; }
+      footer { justify-content: center; text-align: center; padding: 32px 0 40px; }
+    }
     .card {
       background: var(--bg-2); border: 1px solid var(--line); border-radius: 16px;
       padding: 22px; box-shadow: var(--shadow-card);
@@ -177,11 +197,12 @@
     </header>
 
     <section class="hero">
-      <h1>Gueule de loup, piquage, sifflet.<br /><span class="accent">Tracés justes, à l'échelle 1:1.</span></h1>
+      <h1>Intersection de cylindres,<br /><span class="accent">simplement.</span></h1>
       <p class="lede">
-        Cylix calcule les développés d'intersections de cylindres par formules fermées,
-        sans approximation. Deux gabarits par intersection — le tube sécant et la lumière
-        à percer — exportés en PDF à l'échelle 1:1 ou en DXF pour la découpe plasma.
+        Gueule de loup, piquage, coupe en sifflet : Cylix calcule les développés par
+        formules fermées, sans approximation. Deux gabarits par intersection — le tube
+        sécant et la lumière à percer — exportés en PDF à l'échelle 1:1 ou en DXF.
+        Export G-code à venir.
       </p>
 
       <div class="signup">
@@ -189,7 +210,7 @@
         <form id="waitlist" data-endpoint="https://formspree.io/f/REMPLACER_MOI" novalidate>
           <input type="email" name="email" required placeholder="votre@email.fr"
             autocomplete="email" inputmode="email" aria-label="Adresse e-mail" />
-          <button type="submit">Être prévenu du lancement</button>
+          <button type="submit">S'inscrire</button>
         </form>
         <p class="note">Un seul e-mail, au lancement. Pas de spam, désinscription en un clic.</p>
         <p class="msg" id="msg" role="status"></p>
@@ -215,11 +236,12 @@
       </div>
       <div class="card">
         <span class="k">Atelier</span>
-        <h3>PDF 1:1 et DXF</h3>
+        <h3>PDF 1:1, DXF — puis G-code</h3>
         <p>
           Le PDF sort à l'échelle 1:1, tuilé sur A4/A3/A2 avec repères de collage et règle
           de contrôle : on imprime, on enroule sur le tube, on coupe. Le DXF est organisé
           par calques (<code>CUT</code>, <code>REF</code>…) pour la découpe plasma ou laser.
+          L'export G-code suivra, pour piloter directement les découpeuses à tubes.
         </p>
       </div>
       <div class="card">
