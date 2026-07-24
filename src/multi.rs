@@ -11,13 +11,16 @@
 //!   `P(t) = C_i + r_i(cosθ·u_i + sinθ·w_i) + t·d_i` with `(u_i, w_i)` the
 //!   rotated `(e_x, e_y)` frame.
 //!
-//! Every tube ENDS at the node.  The material of a branch grows from its
-//! landing on the main tube (`t⁺` of the line–cylinder quadratic, closed
-//! form) and stops at the first HIGHER-priority branch met on the way up
-//! (the smaller root of the neighbour's quadratic).  Priority is the list
-//! order: branch 1 is only cut by the main tube, branch 2 dies in a saddle
-//! on branch 1, and so on — every saddle rests on a wall that really
-//! exists, so the joint closes without any tube running through another.
+//! Every tube ENDS at the node, arriving from the outside.  Each
+//! generatrix keeps its outermost free segment: the lower lip is the LAST
+//! obstacle met coming in — `t_lip(θ) = max(t_wall, max_j hi_j)`, with
+//! `t_wall` the landing on the main tube (`t⁺` of the line–cylinder
+//! quadratic, closed form) and `hi_j` the exit root of a higher-priority
+//! neighbour's quadratic.  Priority is the list order: branch 1 is only
+//! cut by the main tube, branch 2 rides in a saddle over branch 1's back
+//! where they overlap (the through member of a K/KT overlap joint), and
+//! so on — the lip always rests on material that exists, so the joint
+//! closes without any tube running through another.
 //!
 //! The development of the main tube carries one opening per branch: the
 //! classic gueule de loup of `(r1, r_i, φ_i)` translated by `(r1·ψ_i, z_i)`
@@ -61,23 +64,23 @@ fn default_samples() -> usize {
 
 /// Developed template of one branch plus its 3D rim.
 ///
-/// The template is bounded below by the landing curve on the main tube
-/// (`dev`) and above by the open saddle arcs (`holes`, `closed = false`)
-/// where the tube dies on a higher-priority branch — every tube ends at
-/// the node, and each saddle rests on an intact wall.
+/// The template is bounded below by ONE continuous lip (`dev`): the
+/// landing sinusoid where the tube reaches the main wall, lifted into a
+/// saddle where it rides over a higher-priority branch — every tube ends
+/// at the node, and the lip always rests on an intact wall.
 #[derive(Debug, Clone, Serialize)]
 pub struct MultiBranchResult {
     pub r: f64,
     pub z: f64,
     pub phi: f64,
     pub psi: f64,
-    /// Landing curve on the main tube: `u = r·θ`, `v = t_wall(θ)` — open
-    /// curve over one period.
+    /// Lower lip of the tube: `u = r·θ`, `v = t_lip(θ)` — open curve over
+    /// one period, `t_lip = max(t_wall, exit of prioritized neighbours)`.
     pub dev: Vec<DevPoint>,
-    /// Crossing contours carved by the neighbours, in the same developed
-    /// plane (`HoleResult::branch` = index of the crossing neighbour).
+    /// Always empty for branches (kept for payload stability — openings
+    /// only exist on the main tube).
     pub holes: Vec<HoleResult>,
-    /// 3D rim of the landing curve (world coordinates, mm).
+    /// 3D rim of the lip (world coordinates, mm).
     pub curve3d: Vec<Point3>,
     pub bbox: Option<BBox2>,
     pub circumference: f64,
@@ -220,91 +223,60 @@ pub fn multi(input: &MultiInput) -> MultiPayload {
         s >= floors[j] - 1e-6 && s <= ceilings[j] + 1e-6
     };
 
-    // --- Bottom-up first contact: the material of a branch grows FROM
-    // the main tube outward and stops at the FIRST obstacle met — the
-    // flank of a neighbouring branch.  The sliver under a neighbour is
-    // kept (no gap), nothing ever continues through a neighbour, and both
-    // walls stop on the SAME lower branch of their intersection curve:
-    // the joint closes and every tube ends at the node.
+    // --- Every tube ends at the node, arriving FROM the outside: each
+    // generatrix keeps only its outermost free segment, so its lower lip
+    // is the LAST obstacle met coming in — the main-tube wall, or the
+    // BACK of a higher-priority branch it overlaps (the through member of
+    // a K/KT overlap joint).  t_lip(θ) = max(t_wall, max_j hi_j) is one
+    // continuous curve: landing sinusoid where the tube reaches the wall,
+    // saddle where it rides on a prioritized neighbour.  The lip always
+    // rests ON material that exists, so the joint closes, and nothing
+    // ever continues through a neighbour.
     let mut branches = Vec::with_capacity(frames.len());
     let mut neighbor_pairs: Vec<(usize, usize)> = Vec::new();
 
     for (i, f) in frames.iter().enumerate() {
         let mut dev = Vec::with_capacity(n);
         let mut curve3d = Vec::with_capacity(n);
-        // Binding cap of each generatrix: (t_stop, neighbour) when a
-        // neighbour ends the tube before its free length.
-        let mut caps: Vec<Option<(f64, usize)>> = vec![None; n];
+        let mut cut = false;
 
-        for (k, cap_slot) in caps.iter_mut().enumerate() {
+        for k in 0..n {
             let theta = tau * (k as f64) / (n as f64);
             let base = f.base(theta);
             let Some(t_wall) = entry_into_main(&base, &f.d, r1) else {
                 continue;
             };
-            let mut cap: Option<(f64, usize)> = None;
-            let mut dead = false;
-            // Priority: the list order decides who dies on whom — branch i
+            // Priority: the list order decides who rides on whom — branch i
             // only stops on HIGHER-priority branches (j < i), whose walls
-            // are themselves never carved by i.  Every saddle thus rests on
-            // a wall that really exists: the joint closes, and every tube
-            // still ends at the node.
+            // are never carved by i.  Taking the max exit point makes the
+            // pass order-independent: the lip settles on the farthest
+            // obstacle, i.e. the first one met coming from outside.
+            let mut t_lip = t_wall;
+            let mut on: Option<usize> = None;
             for (j, other) in frames.iter().enumerate().take(i) {
-                if let Some((lo, hi)) = branch_interval(&base, &f.d, other) {
-                    if hi <= t_wall + 1e-9 {
-                        continue; // neighbour entirely below the landing
+                if let Some((_, hi)) = branch_interval(&base, &f.d, other) {
+                    if hi <= t_lip + 1e-9 {
+                        continue; // crossing wholly below the current lip
                     }
-                    let contact = base + lo * f.d;
-                    if !within_material(j, &contact) {
+                    let exit = base + hi * f.d;
+                    if !within_material(j, &exit) {
                         continue; // phantom infinite-cylinder extension
                     }
-                    if lo <= t_wall + 1e-9 {
-                        dead = true; // would start inside the neighbour
-                        break;
-                    }
-                    if cap.is_none() || lo < cap.unwrap().0 {
-                        cap = Some((lo, j));
-                    }
+                    t_lip = hi;
+                    on = Some(j);
                 }
             }
-            if dead {
-                continue;
-            }
-            if let Some((_, j)) = cap {
-                if !neighbor_pairs.contains(&(i.min(j), i.max(j))) {
-                    neighbor_pairs.push((i.min(j), i.max(j)));
+            if let Some(j) = on {
+                cut = true;
+                if !neighbor_pairs.contains(&(j, i)) {
+                    neighbor_pairs.push((j, i));
                 }
             }
-            *cap_slot = Some(match cap {
-                Some((c, j)) => (c, j),
-                None => (f64::INFINITY, usize::MAX),
-            });
-            curve3d.push(Point3::from(base + t_wall * f.d));
-            dev.push(DevPoint { theta, u: f.r * theta, v: t_wall });
+            curve3d.push(Point3::from(base + t_lip * f.d));
+            dev.push(DevPoint { theta, u: f.r * theta, v: t_lip });
         }
 
-        // Saddle arcs: where a higher-priority neighbour ends the tube,
-        // the open curve (θ, t_stop) is the fishmouth cut against it.
-        let mut holes_i: Vec<HoleResult> = Vec::new();
-        for j in 0..i {
-            let values: Vec<Option<f64>> = caps
-                .iter()
-                .map(|c| match c {
-                    Some((t, jj)) if *jj == j && t.is_finite() => Some(*t),
-                    _ => None,
-                })
-                .collect();
-            for arc in cap_arcs(&values, f.r, tau) {
-                let bbox = BBox2::from_points(arc.iter().map(|p| (p.u, p.v)));
-                holes_i.push(HoleResult { branch: j, pts: arc, closed: false, bbox });
-            }
-        }
-
-        let bbox = BBox2::from_points(
-            dev.iter()
-                .chain(holes_i.iter().flat_map(|h| h.pts.iter()))
-                .map(|p| (p.u, p.v)),
-        );
+        let bbox = BBox2::from_points(dev.iter().map(|p| (p.u, p.v)));
         let spec = &input.branches[i];
         branches.push(MultiBranchResult {
             r: spec.r,
@@ -312,8 +284,8 @@ pub fn multi(input: &MultiInput) -> MultiPayload {
             phi: spec.phi,
             psi: spec.psi,
             dev,
-            cut_by_neighbor: !holes_i.is_empty(),
-            holes: holes_i,
+            cut_by_neighbor: cut,
+            holes: Vec::new(),
             curve3d,
             bbox,
             circumference: std::f64::consts::TAU * spec.r,
@@ -354,11 +326,11 @@ pub fn multi(input: &MultiInput) -> MultiPayload {
 
     // Warnings: mutual seams and merged openings.
     let mut warnings = Vec::new();
-    for &(i, j) in &neighbor_pairs {
+    for &(through, rider) in &neighbor_pairs {
         warnings.push(format!(
-            "Les piquages {} et {} se rencontrent — chacun s'arrête sur le flanc de l'autre (coupe en selle), leurs parois s'épousent le long de la couture.",
-            i + 1,
-            j + 1
+            "Le piquage {} chevauche le piquage {} (prioritaire) — sa lèvre s'arrête en selle sur son dos, la couture épouse son flanc.",
+            rider + 1,
+            through + 1
         ));
     }
     for (i, j) in merged {
@@ -377,50 +349,6 @@ pub fn multi(input: &MultiInput) -> MultiPayload {
         holes,
         warnings,
     }
-}
-
-/// Open saddle arcs from the per-generatrix caps: contiguous circular runs
-/// of `Some(t_stop)` become open polylines `(θ, t_stop)` — the fishmouth
-/// cut of the tube against one neighbour.
-fn cap_arcs(values: &[Option<f64>], r: f64, tau: f64) -> Vec<Vec<DevPoint>> {
-    let n = values.len();
-    let valid_count = values.iter().filter(|v| v.is_some()).count();
-    if valid_count < 2 {
-        return Vec::new();
-    }
-    let theta_at = |k: usize, wrap: bool| tau * (k as f64) / (n as f64) + if wrap { tau } else { 0.0 };
-    if valid_count == n {
-        // The neighbour caps every generatrix: one arc over the full period.
-        return vec![(0..n)
-            .map(|k| {
-                let theta = theta_at(k, false);
-                DevPoint { theta, u: r * theta, v: values[k].unwrap() }
-            })
-            .collect()];
-    }
-    let start = (0..n)
-        .find(|&k| values[k].is_none() && values[(k + 1) % n].is_some())
-        .expect("mixed validity implies a boundary");
-    let mut arcs = Vec::new();
-    let mut run: Vec<DevPoint> = Vec::new();
-    for off in 1..=n {
-        let k = (start + off) % n;
-        let wrapped = start + off >= n;
-        if let Some(v) = values[k] {
-            let theta = theta_at(k, wrapped);
-            run.push(DevPoint { theta, u: r * theta, v });
-        } else if !run.is_empty() {
-            if run.len() >= 2 {
-                arcs.push(std::mem::take(&mut run));
-            } else {
-                run.clear();
-            }
-        }
-    }
-    if run.len() >= 2 {
-        arcs.push(run);
-    }
-    arcs
 }
 
 // ---------------------------------------------------------------------
@@ -661,62 +589,120 @@ mod tests {
         ]
     }
 
-    #[test]
-    fn crossing_branches_carve_each_other_and_keep_their_landing() {
-        // Priority model: branch 2 dies on branch 1 (saddle arc), branch 1
-        // is untouched, and wherever a generatrix survives its landing on
-        // the main tube is IDENTICAL to the isolated computation.
-        let node = multi(&MultiInput { r1: 40.0, branches: v_specs(), n_samples: 720 });
-        assert!(node.branches[0].holes.is_empty(), "le piquage prioritaire est intact");
-        assert!(!node.branches[1].holes.is_empty(), "le second meurt en selle sur le premier");
-        assert!(node.branches[1].cut_by_neighbor && !node.branches[0].cut_by_neighbor);
-        assert!(!node.warnings.is_empty());
-        assert_eq!(node.branches[0].dev.len(), 720, "le prioritaire garde tout son pourtour");
-
-        let alone = multi(&MultiInput {
-            r1: 40.0,
-            branches: vec![v_specs()[1]],
-            n_samples: 720,
-        });
-        let iso = &alone.branches[0].dev;
-        for p in &node.branches[1].dev {
-            let q = iso
-                .iter()
-                .min_by(|a, b| {
-                    (a.theta - p.theta).abs().partial_cmp(&(b.theta - p.theta).abs()).unwrap()
-                })
-                .unwrap();
-            assert!((p.v - q.v).abs() < 1e-9, "l'atterrissage ne doit pas bouger");
-        }
+    /// Distance from a world point to the axis of `spec`.
+    fn dist_to_axis(spec: &MultiBranchSpec, w: &nalgebra::Vector3<f64>) -> f64 {
+        let m = crate::geometry::rot_z(spec.psi) * crate::geometry::rot_x(spec.phi);
+        let d = m * nalgebra::Vector3::z();
+        let rel = w - nalgebra::Vector3::new(0.0, 0.0, spec.z);
+        (rel - d * rel.dot(&d)).norm()
     }
 
     #[test]
-    fn saddle_arcs_rest_on_the_master_wall() {
-        // Closure: every point of the saddle arc of branch 2 lies ON the
-        // surface of branch 1 (distance to its axis = r), ABOVE branch 1's
-        // own landing — the saddle rests on a wall that really exists.
+    fn crossing_branches_carve_each_other_and_keep_their_landing() {
+        // Overlap model: branch 1 (through member) is untouched, branch 2
+        // keeps its full circumference but its lip lifts into a saddle over
+        // branch 1's back where they overlap.  Wherever the lip is NOT
+        // lifted, the landing is IDENTICAL to the isolated computation.
         let specs = v_specs();
         let node = multi(&MultiInput { r1: 40.0, branches: specs.clone(), n_samples: 720 });
-        let m = crate::geometry::rot_z(specs[0].psi) * crate::geometry::rot_x(specs[0].phi);
-        let (c0, d0) = (nalgebra::Vector3::new(0.0, 0.0, specs[0].z), m * nalgebra::Vector3::z());
-        let mut checked = 0usize;
-        for h in &node.branches[1].holes {
-            assert!(!h.closed, "la selle est un arc ouvert");
-            assert_eq!(h.branch, 0, "la selle vise le piquage prioritaire");
-            for p in h.pts.iter().step_by(3) {
-                let w = to_world(&specs[1], p);
-                let rel = w - c0;
-                let dist_axis = (rel - d0 * rel.dot(&d0)).norm();
-                assert!(
-                    (dist_axis - specs[0].r).abs() < 1e-9,
-                    "selle hors de la paroi maîtresse : {dist_axis}"
-                );
-                let dist_main = (w.x * w.x + w.y * w.y).sqrt();
-                assert!(dist_main >= 40.0 - 1e-6, "selle sous le tube principal");
-                checked += 1;
+        assert!(node.branches[1].cut_by_neighbor && !node.branches[0].cut_by_neighbor);
+        assert!(!node.warnings.is_empty());
+        assert_eq!(node.branches[0].dev.len(), 720, "le prioritaire garde tout son pourtour");
+        assert_eq!(node.branches[1].dev.len(), 720, "le chevauchant garde tout son pourtour");
+
+        let alone = multi(&MultiInput { r1: 40.0, branches: vec![specs[1]], n_samples: 720 });
+        let iso = &alone.branches[0].dev;
+        let mut lifted = 0usize;
+        for (p, q) in node.branches[1].dev.iter().zip(iso.iter()) {
+            assert!((p.theta - q.theta).abs() < 1e-12);
+            if (p.v - q.v).abs() < 1e-9 {
+                continue; // free sector: landing untouched
             }
+            // Lifted sector: strictly above the wall, exactly ON the back
+            // of the through member.
+            assert!(p.v > q.v, "la lèvre ne descend jamais sous l'atterrissage");
+            let w = to_world(&specs[1], p);
+            assert!(
+                (dist_to_axis(&specs[0], &w) - specs[0].r).abs() < 1e-9,
+                "selle hors du dos du prioritaire"
+            );
+            lifted += 1;
+        }
+        assert!(lifted > 30, "trop peu de génératrices en selle ({lifted})");
+    }
+
+    #[test]
+    fn saddle_lip_rests_on_the_through_member_wall() {
+        // Closure: every lifted lip point of branch 2 lies ON the surface
+        // of branch 1 (distance to its axis = r) and outside the main tube
+        // — the saddle rests on a wall that really exists.
+        let specs = v_specs();
+        let node = multi(&MultiInput { r1: 40.0, branches: specs.clone(), n_samples: 720 });
+        let alone = multi(&MultiInput { r1: 40.0, branches: vec![specs[1]], n_samples: 720 });
+        let mut checked = 0usize;
+        for (p, q) in node.branches[1].dev.iter().zip(alone.branches[0].dev.iter()) {
+            if (p.v - q.v).abs() < 1e-9 {
+                continue;
+            }
+            let w = to_world(&specs[1], p);
+            let dist_axis = dist_to_axis(&specs[0], &w);
+            assert!(
+                (dist_axis - specs[0].r).abs() < 1e-9,
+                "selle hors de la paroi maîtresse : {dist_axis}"
+            );
+            let dist_main = (w.x * w.x + w.y * w.y).sqrt();
+            assert!(dist_main >= 40.0 - 1e-6, "selle sous le tube principal");
+            checked += 1;
         }
         assert!(checked > 30, "trop peu de points de selle ({checked})");
+    }
+
+    #[test]
+    fn concurrent_axes_truss_node_lifts_the_overlapping_lips() {
+        // Three tubes fanning onto the main tube, ALL axes through its
+        // centre (z = 0, ψ = 0) — the truss-node layout.  Their footprints
+        // overlap on the wall, so the lower-priority tubes MUST ride over
+        // the higher ones: the lip lifts off the wall onto the back of the
+        // through member.  This is the case where the first entry into the
+        // neighbour's cylinder sits INSIDE the main tube — the obstacle
+        // that counts is the EXIT point, probed for real material.
+        let specs = vec![
+            MultiBranchSpec { r: 30.0, z: 0.0, phi: 45f64.to_radians(), psi: 0.0 },
+            MultiBranchSpec { r: 25.0, z: 0.0, phi: 90f64.to_radians(), psi: 0.0 },
+            MultiBranchSpec { r: 22.5, z: 0.0, phi: 135f64.to_radians(), psi: 0.0 },
+        ];
+        let node = multi(&MultiInput { r1: 50.0, branches: specs.clone(), n_samples: 720 });
+
+        // The through member keeps its full, untouched landing.
+        assert_eq!(node.branches[0].dev.len(), 720, "le prioritaire reste entier");
+        assert!(!node.branches[0].cut_by_neighbor);
+
+        // 2 and 3 keep their full circumference but ride over the others.
+        for bi in [1usize, 2] {
+            let b = &node.branches[bi];
+            assert_eq!(b.dev.len(), 720, "P{} garde tout son pourtour", bi + 1);
+            assert!(b.cut_by_neighbor, "P{} devrait chevaucher un prioritaire", bi + 1);
+            let alone =
+                multi(&MultiInput { r1: 50.0, branches: vec![specs[bi]], n_samples: 720 });
+            let mut lifted = 0usize;
+            for (p, q) in b.dev.iter().zip(alone.branches[0].dev.iter()) {
+                if (p.v - q.v).abs() < 1e-9 {
+                    continue;
+                }
+                assert!(p.v > q.v, "la lèvre ne descend jamais sous l'atterrissage");
+                // The lifted lip rests exactly on SOME higher-priority wall,
+                // outside the main tube: the joint closes on real material.
+                let w = to_world(&specs[bi], p);
+                let on_prior = specs[..bi]
+                    .iter()
+                    .any(|t| (dist_to_axis(t, &w) - t.r).abs() < 1e-9);
+                assert!(on_prior, "selle P{} hors de toute paroi prioritaire", bi + 1);
+                let dist_main = (w.x * w.x + w.y * w.y).sqrt();
+                assert!(dist_main >= 50.0 - 1e-6, "selle sous le tube principal");
+                lifted += 1;
+            }
+            assert!(lifted > 50, "P{} : trop peu de selle ({lifted})", bi + 1);
+        }
     }
 
     /// Shoelace area of a closed developed loop.
@@ -823,7 +809,7 @@ mod tests {
             for p in &br.curve3d {
                 let dist_main = (p.x * p.x + p.y * p.y).sqrt();
                 if (dist_main - 50.0).abs() > 1e-6 {
-                    continue; // off the wall (should not happen for a landing curve)
+                    continue; // lifted lip riding a neighbour — not on the wall
                 }
                 // Landing points passing UNDER a neighbour are covered by
                 // that neighbour's opening — the visible rim is the rest.

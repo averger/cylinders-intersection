@@ -23,7 +23,10 @@
   function addBranch() {
     if (store.params.branches.length >= 8) return;
     const last = store.params.branches[store.params.branches.length - 1];
-    const branches = [...store.params.branches, { ...last, z: last.z + 60 }];
+    // Axes are concurrent: an exact clone would die entirely on its twin —
+    // tilt the newcomer so it lands somewhere of its own.
+    const angleDeg = last.angleDeg + 30 <= 175 ? last.angleDeg + 30 : last.angleDeg - 30;
+    const branches = [...store.params.branches, { ...last, angleDeg }];
     store.params = { ...store.params, branches };
     store.compute();
   }
@@ -179,7 +182,8 @@
               Piquages ({p.branches.length})
             </span>
             <span class="text-[10px] text-ash/70">
-              l'ordre donne la priorité : un piquage meurt sur ceux au-dessus
+              axes concourants au centre du tube · l'ordre donne la priorité :
+              un piquage meurt sur ceux au-dessus
             </span>
           </div>
           <button
@@ -214,17 +218,6 @@
               value={b.d}
               decimals={1}
               onchange={(v) => patchBranch(i, { d: v })}
-            />
-            <Slider
-              label="Position z"
-              unit="mm"
-              min={-300}
-              max={300}
-              step={1}
-              value={b.z}
-              decimals={0}
-              hint="le long de l'axe du tube principal"
-              onchange={(v) => patchBranch(i, { z: v })}
             />
             <Slider
               label="Inclinaison φ"

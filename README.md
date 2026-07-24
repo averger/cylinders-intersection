@@ -143,16 +143,17 @@ interface **Svelte 5 + Tailwind 4** servie en SPA, vue 3D **Three.js**.
 * **Layout outil** : paramètres à gauche, viewport central, bascule **3D ↔ 2D**,
   barre de statut ; **études en onglets** (multi-études, renommage au double-clic,
   copie des paramètres courants, persistance locale) — comme dans pilegroupx.
-* **Mode Multi tube** : N tubes (Ø, position z, inclinaison φ,
-  azimut ψ) sur un même tube principal. **Tous les tubes s'arrêtent au
-  nœud** : l'ordre de la liste donne la priorité, et chaque piquage pousse
-  depuis son atterrissage sur le tube principal jusqu'au premier piquage
-  prioritaire rencontré — son gabarit porte la sinusoïde d'atterrissage
-  **plus les arcs de selle** où il meurt sur le flanc du prioritaire, le
-  tout en formules fermées (la couture repose exactement sur la paroi qui
-  l'arrête : joint fermé). Le développé du principal porte **toutes les
-  lumières** positionnées (azimut → décalage horizontal exact) ;
-  chevauchements fusionnés en contour d'enveloppe et signalés.
+* **Mode Multi tube** : N tubes (Ø, inclinaison φ, azimut ψ) dont les axes
+  **convergent au centre du tube principal** — un vrai nœud de treillis,
+  comme dans les autres modes. **Tous les tubes s'arrêtent au nœud** :
+  l'ordre de la liste donne la priorité (piquage 1 = membre traversant), et
+  la lèvre de chaque piquage est **une seule courbe continue** — sinusoïde
+  d'atterrissage là où il touche le tube principal, **selle** là où il
+  chevauche le dos d'un prioritaire (assemblage à recouvrement des nœuds
+  K/KT), le tout en formules fermées : la couture repose exactement sur la
+  paroi qui l'arrête, joint fermé. Le développé du principal porte
+  **toutes les lumières** positionnées (azimut → décalage horizontal
+  exact) ; chevauchements fusionnés en contour d'enveloppe et signalés.
 * **Vue 3D fidèle à la pièce** : chaque cylindre **s'arrête à l'intersection** —
   le tube incliné est maillé jusqu'à son premier contact avec le gros tube
   (selon la lèvre outer/inner choisie), le cylindre principal est percé de la

@@ -18,10 +18,11 @@ export type Mode = "cyl_cyl" | "cyl_plane" | "multi";
 export type View = "3d" | "2d";
 export type Theme = "light" | "dark";
 
-/** One branch of a multi-branch node, in UI units (mm / degrees). */
+/** One branch of a multi-branch node, in UI units (mm / degrees).
+ * Every branch axis passes through the CENTRE of the main tube — the axes
+ * are concurrent, like in the two-cylinder mode: a true truss node. */
 export interface BranchParam {
   d: number;          // branch diameter, mm
-  z: number;          // position along the main axis, mm
   angleDeg: number;   // inclination from the main axis, (0°, 180°)
   azimutDeg: number;  // azimuth around the main tube, degrees
 }
@@ -55,12 +56,14 @@ export interface Study {
   editor: EditorState;
 }
 
-/** Default node: a V of two Ø 60 tubes whose axes cross INSIDE the main
- * tube — both land on the wall and kiss each other along a mutual seam. */
+/** Default node: three tubes fanning onto the main tube, all axes through
+ * its centre, no azimuth — a classic truss node.  The list order gives the
+ * priority: 2 dies on 1, 3 dies on 1 and 2. */
 export function defaultBranches(): BranchParam[] {
   return [
-    { d: 60, z: -40, angleDeg: 45, azimutDeg: 0 },
-    { d: 60, z: 40, angleDeg: 135, azimutDeg: 0 },
+    { d: 60, angleDeg: 45, azimutDeg: 0 },
+    { d: 50, angleDeg: 90, azimutDeg: 0 },
+    { d: 45, angleDeg: 135, azimutDeg: 0 },
   ];
 }
 
@@ -274,7 +277,7 @@ class AppStore {
           r1: p.d1 / 2,
           branches: p.branches.map((b) => ({
             r: b.d / 2,
-            z: b.z,
+            z: 0,
             phi: (b.angleDeg * Math.PI) / 180,
             psi: (b.azimutDeg * Math.PI) / 180,
           })),

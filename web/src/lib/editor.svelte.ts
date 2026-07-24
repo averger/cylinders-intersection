@@ -85,7 +85,7 @@ class EditorStore {
         r1: p.d1 / 2,
         branches: p.branches.map((b) => ({
           r: b.d / 2,
-          z: b.z,
+          z: 0,
           phi: (b.angleDeg * Math.PI) / 180,
           psi: (b.azimutDeg * Math.PI) / 180,
         })),

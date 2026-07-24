@@ -326,29 +326,43 @@ $\varphi_i \in (0, \pi)$ et son **azimut** $\psi_i$ autour du tube. L'axe du
 piquage $i$ passe par $C_i = (0, 0, z_i)$ avec la direction
 $d_i = R_z(\psi_i)\,R_x(\varphi_i)\,e_z$, et sa génératrice d'angle $\theta$
 est la droite $P(t) = C_i + r_i(\cos\theta\,u_i + \sin\theta\,w_i) + t\,d_i$.
+L'application fixe $z_i = 0$ : **tous les axes concourent au centre du tube
+principal**, comme dans les autres modes — le point de travail d'un nœud de
+treillis, sans excentrement.
 
 Chaque piquage **s'arrête au nœud** : aucun tube ne traverse un autre.
 Comme deux cylindres qui se croisent ne peuvent pas *tous deux* s'arrêter
-l'un sur l'autre en refermant le joint (les deux calottes « je m'arrête au
-premier contact » vivent sur des portions différentes de la courbe
-d'intersection — elles ne coïncident pas), il faut une **convention de
-priorité** : l'ordre de la liste. Le piquage $i$ pousse depuis sa courbe
-d'atterrissage sur le tube principal, $v(\theta) = t^{+}_{\text{principal}}(\theta)$
-(plus grande racine du trinôme droite–cylindre, jamais modifiée), et sa
-génératrice s'arrête sur le **premier piquage prioritaire** $j < i$ qu'elle
-rencontre : $t_{\text{stop}}(\theta) = \min_{j<i} t^{-}_{j}(\theta)$, la
-petite racine du trinôme du voisin — le point d'entrée dans sa paroi. Une
-génératrice déjà à l'intérieur d'un prioritaire à l'atterrissage
-($t^{-}_{j} \le v(\theta)$) est **morte** : elle n'existe pas dans la pièce.
-Un voisin ne coupe que dans sa **longueur physique** (entre son plancher et
-son plafond axiaux — l'extension infinie du cylindre ne coupe pas).
+l'un sur l'autre en refermant le joint, il faut une **convention de
+priorité** : l'ordre de la liste — le piquage 1 est le **membre
+traversant**, les suivants viennent se poser sur lui (l'assemblage à
+recouvrement des nœuds K/KT en charpente tubulaire).
 
-Le lieu des points d'arrêt, parcouru dans l'ordre de $\theta$, forme des
-**arcs de selle ouverts** sur le développé du piquage $i$ : sa lèvre haute.
-Chaque point de cet arc est, par construction, exactement sur la paroi du
-prioritaire $j$ (à distance $r_j$ de son axe) : le piquage $i$ meurt en
-épousant le flanc de $j$, le joint est fermé, et chaque tube épouse le tube
-principal sur tout le pourtour survivant.
+Un tube réel arrive de l'extérieur : chaque génératrice ne garde que son
+**segment libre le plus extérieur**, et sa lèvre basse est le *dernier*
+obstacle rencontré en entrant,
+
+$$
+t_{\text{lèvre}}(\theta)
+\;=\; \max\Bigl(t^{+}_{\text{principal}}(\theta),\
+\max_{j<i}\ t^{\text{sortie}}_{j}(\theta)\Bigr),
+$$
+
+où $t^{+}_{\text{principal}}$ est l'atterrissage sur le tube principal
+(plus grande racine du trinôme droite–cylindre) et
+$t^{\text{sortie}}_{j}$ la **grande racine** du trinôme du prioritaire
+$j$ — le point où la génératrice ressort de son cylindre, c'est-à-dire son
+**dos**. Un prioritaire ne compte que dans sa **longueur physique** (entre
+son plancher et son plafond axiaux — l'extension infinie du cylindre
+n'arrête rien).
+
+La lèvre est **une seule courbe continue** : sinusoïde d'atterrissage là où
+le tube atteint la paroi du principal, **selle** là où il chevauche le dos
+d'un prioritaire — les deux se raccordent exactement au bord de l'empreinte
+commune, où $t^{\text{sortie}}_{j} = t^{+}_{\text{principal}}$. Chaque
+point levé est, par construction, à distance $r_j$ de l'axe du prioritaire :
+la couture épouse une paroi qui existe, le joint est fermé, et le pourtour
+complet du tube est conservé (un tube ne perd jamais de génératrices, il
+les pose ailleurs).
 
 Sur le tube principal, chaque piquage découpe sa gueule de loup isolée
 (§3.2) **translatée** de $(R_1\psi_i,\ z_i)$ dans le plan déroulé : la
@@ -358,11 +372,11 @@ se chevauchent, la découpe résultante est l'union des deux contours ; le
 moteur le signale.
 
 Ces énoncés sont vérifiés par les tests du moteur : un nœud à un seul
-piquage reproduit (4) à $10^{-9}$ près, la courbe d'atterrissage du
-survivant n'est jamais altérée, et — propriété de fermeture — chaque point
-d'un arc de selle est à distance $r_j$ de l'axe du piquage prioritaire
-(à $10^{-9}$ près) tout en restant hors du tube principal : la couture
-repose exactement sur la paroi qui l'arrête (aucun jour dans le joint).
+piquage reproduit (4) à $10^{-9}$ près, la lèvre du membre traversant n'est
+jamais altérée, et — propriété de fermeture — chaque point levé de la lèvre
+d'un chevauchant est à distance $r_j$ de l'axe d'un prioritaire (à
+$10^{-9}$ près) tout en restant hors du tube principal : la couture repose
+exactement sur la paroi qui l'arrête (aucun jour dans le joint).
 
 ---
 
