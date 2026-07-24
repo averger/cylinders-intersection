@@ -1102,13 +1102,19 @@
         color: "var(--ember)",
         dy: -44,
       });
-      // The cut rim — same emissive accent as the classic modes.
+      // The cut rim — same emissive accent as the classic modes, but drawn
+      // along the EXACT polyline: the cut can jump along a generatrix at a
+      // main↔neighbour transition, and a smoothed (Catmull-Rom) curve would
+      // swing off the surface there and float in mid-air.
       if (b.curve3d.length > 2) {
         const pts = b.curve3d.map((p) => new THREE.Vector3(p.x, p.z, -p.y));
-        const curve = new THREE.CatmullRomCurve3(pts, true);
+        const path = new THREE.CurvePath<THREE.Vector3>();
+        for (let k = 0; k < pts.length; k++) {
+          path.add(new THREE.LineCurve3(pts[k], pts[(k + 1) % pts.length]));
+        }
         const tubeGeom = new THREE.TubeGeometry(
-          curve,
-          Math.min(720, pts.length),
+          path,
+          Math.min(1440, pts.length * 2),
           Math.max(0.6, r1 * 0.012),
           10,
           true,
