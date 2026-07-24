@@ -327,23 +327,24 @@ piquage $i$ passe par $C_i = (0, 0, z_i)$ avec la direction
 $d_i = R_z(\psi_i)\,R_x(\varphi_i)\,e_z$, et sa génératrice d'angle $\theta$
 est la droite $P(t) = C_i + r_i(\cos\theta\,u_i + \sin\theta\,w_i) + t\,d_i$.
 
-La découpe physique suit la règle du **premier contact** : en venant de
-$t = +\infty$, le tube s'arrête à la première surface rencontrée — le tube
-principal *ou un piquage voisin*. Chaque obstacle est un cylindre, donc
-chaque contact est la **plus grande racine d'un trinôme du second degré**
-en $t$ (l'intersection droite–cylindre reste fermée quel que soit l'axe) :
+La surface conservée du piquage $i$ est le **booléen** « hors de tout
+voisin » : sa frontière basse est la courbe d'atterrissage sur le tube
+principal, $v(\theta) = t^{+}_{\text{principal}}(\theta)$ (plus grande
+racine du trinôme droite–cylindre, jamais modifiée par les voisins), et
+chaque voisin $j$ qui traverse le piquage y découpe un **contour fermé** :
+la génératrice de $i$ est à l'intérieur du cylindre $j$ sur l'intervalle
+$(t^{-}_{j}(\theta),\ t^{+}_{j}(\theta))$ entre les deux racines de son
+trinôme, et le lieu de ces deux lèvres, parcouru dans l'ordre de $\theta$,
+est un contour exact — le strict analogue de la gueule de loup (§3.2)
+transposé sur le piquage. Un intervalle n'est retenu que s'il mord
+au-dessus de la courbe d'atterrissage et dans la **longueur physique** du
+voisin (entre son plancher et son plafond axiaux — l'extension infinie du
+cylindre ne coupe pas).
 
-$$
-t_{\text{coupe}}(\theta) \;=\; \max\Bigl(t^{+}_{\text{principal}}(\theta),\;
-\max_{j \ne i}\, t^{+}_{j}(\theta)\Bigr),
-$$
-
-où un contact avec le voisin $j$ n'est retenu que s'il a lieu **hors** du
-cylindre principal (à l'intérieur, il n'y a pas de matière du piquage $j$).
-Le gabarit du piquage $i$ est $(u, v) = (r_i\theta,\ t_{\text{coupe}}(\theta))$
-— un raccord de courbes exactes, la **couture mutuelle** entre deux piquages
-qui se rencontrent avant le tube principal apparaissant comme un point
-anguleux mobile du développé.
+Les parois de deux piquages qui se traversent s'arrêtent ainsi toutes deux
+sur la **même courbe d'intersection** de leurs cylindres : elles
+s'embrassent le long de la couture, le joint est fermé, et chaque tube
+épouse le tube principal sur tout son pourtour.
 
 Sur le tube principal, chaque piquage découpe sa gueule de loup isolée
 (§3.2) **translatée** de $(R_1\psi_i,\ z_i)$ dans le plan déroulé : la
@@ -353,9 +354,11 @@ se chevauchent, la découpe résultante est l'union des deux contours ; le
 moteur le signale.
 
 Ces énoncés sont vérifiés par les tests du moteur : un nœud à un seul
-piquage reproduit (4) à $10^{-9}$ près, la couture mutuelle d'un V
-symétrique est elle-même symétrique ($\theta \mapsto -\theta$), et elle ne
-peut que raccourcir le tube, jamais l'allonger.
+piquage reproduit (4) à $10^{-9}$ près, la courbe d'atterrissage n'est
+jamais altérée par un voisin, et — propriété de fermeture — les contours
+de traversée portés par deux piquages qui se croisent coïncident en 3D sur
+la courbe d'intersection commune de leurs cylindres (aucun jour dans le
+joint).
 
 ---
 

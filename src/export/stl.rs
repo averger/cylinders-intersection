@@ -114,9 +114,16 @@ struct TubeFrame {
     r: f64,
 }
 
-/// Tube along `frame`, generators spanning `t ∈ [dev.v, t_end]`
-/// (or `[t_end, dev.v]` when `t_end` is below).
-fn branch_wall(frame: &TubeFrame, dev: &[DevPoint], t_end: f64, out: &mut Vec<Tri>) {
+/// Tube along `frame`, generators spanning `t ∈ [dev.v, t_end]` (or
+/// `[t_end, dev.v]` when `t_end` is below), minus the crossing contours
+/// given as closed developed loops (neighbour branches passing through).
+fn branch_wall(
+    frame: &TubeFrame,
+    dev: &[DevPoint],
+    holes: &[(Vec<(f64, f64)>, bool)],
+    t_end: f64,
+    out: &mut Vec<Tri>,
+) {
     let TubeFrame { c, d, u, w, r } = *frame;
     if dev.len() < 3 {
         return;
@@ -125,28 +132,85 @@ fn branch_wall(frame: &TubeFrame, dev: &[DevPoint], t_end: f64, out: &mut Vec<Tr
         let (st, ct) = theta.sin_cos();
         c + r * (ct * u + st * w) + t * d
     };
+    let circ = std::f64::consts::TAU * r;
+    let below = t_end < dev[0].v;
+
+    // Kept spans of one generatrix: [t_wall, t_end] minus hole intervals.
+    let spans_at = |k: usize| -> Vec<(f64, f64)> {
+        let (lo0, hi0) = if below { (t_end, dev[k].v) } else { (dev[k].v, t_end) };
+        let mut cuts: Vec<(f64, f64)> = Vec::new();
+        for (loop_pts, _) in holes {
+            'shift: for kk in -2i32..=2 {
+                let uu = dev[k].u + f64::from(kk) * circ;
+                let mut vs: Vec<f64> = Vec::new();
+                let m = loop_pts.len();
+                for idx in 0..m {
+                    let a = loop_pts[idx];
+                    let b = loop_pts[(idx + 1) % m];
+                    if (a.0 - uu) * (b.0 - uu) < 0.0 {
+                        let s = (uu - a.0) / (b.0 - a.0);
+                        vs.push(a.1 + s * (b.1 - a.1));
+                    }
+                }
+                if vs.len() >= 2 {
+                    let lo = vs.iter().cloned().fold(f64::INFINITY, f64::min);
+                    let hi = vs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                    cuts.push((lo, hi));
+                    break 'shift;
+                }
+            }
+        }
+        cuts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        let mut spans = Vec::new();
+        let mut lo = lo0;
+        for &(h_lo, h_hi) in &cuts {
+            if h_lo > lo {
+                spans.push((lo, h_lo.min(hi0)));
+            }
+            lo = lo.max(h_hi);
+        }
+        if lo < hi0 {
+            spans.push((lo, hi0));
+        }
+        spans.retain(|(a, b)| b > a);
+        spans
+    };
+
     let mean_step = std::f64::consts::TAU / dev.len() as f64;
-    for pair in dev.windows(2) {
-        if (pair[1].theta - pair[0].theta).abs() < 4.0 * mean_step {
-            quad(
-                point(pair[0].theta, pair[0].v),
-                point(pair[0].theta, t_end),
-                point(pair[1].theta, pair[1].v),
-                point(pair[1].theta, t_end),
-                out,
-            );
+    let mut emit = |ka: usize, theta_a: f64, kb: usize, theta_b: f64| {
+        let sa = spans_at(ka);
+        let sb = spans_at(kb);
+        if sa.len() == sb.len() {
+            for (a, b) in sa.iter().zip(sb.iter()) {
+                quad(
+                    point(theta_a, a.0),
+                    point(theta_a, a.1),
+                    point(theta_b, b.0),
+                    point(theta_b, b.1),
+                    out,
+                );
+            }
+        } else {
+            let dominant = if sa.len() > sb.len() { &sa } else { &sb };
+            for s in dominant {
+                quad(
+                    point(theta_a, s.0),
+                    point(theta_a, s.1),
+                    point(theta_b, s.0),
+                    point(theta_b, s.1),
+                    out,
+                );
+            }
+        }
+    };
+    for k in 0..dev.len() - 1 {
+        if (dev[k + 1].theta - dev[k].theta).abs() < 4.0 * mean_step {
+            emit(k, dev[k].theta, k + 1, dev[k + 1].theta);
         }
     }
-    let first = dev[0];
-    let last = dev[dev.len() - 1];
-    if first.theta + std::f64::consts::TAU - last.theta < 4.0 * mean_step {
-        quad(
-            point(last.theta, last.v),
-            point(last.theta, t_end),
-            point(first.theta + std::f64::consts::TAU, first.v),
-            point(first.theta + std::f64::consts::TAU, t_end),
-            out,
-        );
+    let last = dev.len() - 1;
+    if dev[0].theta + std::f64::consts::TAU - dev[last].theta < 4.0 * mean_step {
+        emit(last, dev[last].theta, 0, dev[0].theta + std::f64::consts::TAU);
     }
 }
 
@@ -182,7 +246,17 @@ fn build_triangles(doc: &ExportDocument) -> Result<Vec<Tri>, ExportError> {
 
             for br in &payload.branches {
                 let m = rot_z(br.psi) * rot_x(br.phi);
-                let t_hi = br.dev.iter().map(|p| p.v).fold(f64::NEG_INFINITY, f64::max);
+                let t_hi = br
+                    .dev
+                    .iter()
+                    .map(|p| p.v)
+                    .chain(br.holes.iter().flat_map(|h| h.pts.iter().map(|p| p.v)))
+                    .fold(f64::NEG_INFINITY, f64::max);
+                let branch_holes: Vec<(Vec<(f64, f64)>, bool)> = br
+                    .holes
+                    .iter()
+                    .map(|h| (h.pts.iter().map(|p| (p.u, p.v)).collect(), h.closed))
+                    .collect();
                 branch_wall(
                     &TubeFrame {
                         c: Vector3::new(0.0, 0.0, br.z),
@@ -192,6 +266,7 @@ fn build_triangles(doc: &ExportDocument) -> Result<Vec<Tri>, ExportError> {
                         r: br.r,
                     },
                     &br.dev,
+                    &branch_holes,
                     t_hi + (3.0 * br.r).max(90.0),
                     &mut tris,
                 );
@@ -235,6 +310,7 @@ fn build_triangles(doc: &ExportDocument) -> Result<Vec<Tri>, ExportError> {
                     r: r2,
                 },
                 &payload.dev_branch,
+                &[],
                 t_end,
                 &mut tris,
             );
@@ -257,6 +333,7 @@ fn build_triangles(doc: &ExportDocument) -> Result<Vec<Tri>, ExportError> {
                     r: r1,
                 },
                 &payload.dev_branch,
+                &[],
                 bottom,
                 &mut tris,
             );

@@ -883,15 +883,27 @@
     };
   }
 
-  /** Branch tube from its developed cut: generators run t_cut(θ) → far end. */
+  /**
+   * Branch tube from its developed cut: generators run from the landing
+   * curve t_wall(θ) to the far end, MINUS the crossing contours carved by
+   * neighbouring branches (per-column solid spans, boolean model).
+   */
   function buildBranchTube(
     fr: BranchFrameT,
     dev: DevPoint[],
-  ): { geom: THREE.BufferGeometry; rim: THREE.Vector3[]; endCenter: THREE.Vector3 } | null {
+    devHoles: { pts: DevPoint[]; closed: boolean }[],
+  ): {
+    geom: THREE.BufferGeometry;
+    rim: THREE.Vector3[];
+    endCenter: THREE.Vector3;
+    holeRims: THREE.Vector3[][];
+  } | null {
     if (dev.length < 3) return null;
     let tHi = -Infinity;
     for (const s of dev) tHi = Math.max(tHi, s.v);
+    for (const h of devHoles) for (const p of h.pts) tHi = Math.max(tHi, p.v);
     const tEnd = tHi + Math.max(3 * fr.r, 90);
+    const circ = 2 * Math.PI * fr.r;
 
     const P = (th: number, t: number) => {
       const ct = Math.cos(th), st = Math.sin(th);
@@ -910,23 +922,77 @@
       );
     };
 
+    // Kept spans of one generatrix: [t_wall, tEnd] minus hole intervals.
+    const spansAt = (uCol: number, tWall: number): [number, number][] => {
+      const cuts: [number, number][] = [];
+      for (const h of devHoles) {
+        for (let kk = -2; kk <= 2; kk++) {
+          const u = uCol + kk * circ;
+          const vs: number[] = [];
+          const m = h.pts.length;
+          for (let idx = 0; idx < m; idx++) {
+            const a = h.pts[idx];
+            const b = h.pts[(idx + 1) % m];
+            if ((a.u - u) * (b.u - u) < 0) {
+              const s = (u - a.u) / (b.u - a.u);
+              vs.push(a.v + s * (b.v - a.v));
+            }
+          }
+          if (vs.length >= 2) {
+            cuts.push([Math.min(...vs), Math.max(...vs)]);
+            break;
+          }
+        }
+      }
+      cuts.sort((x, y) => x[0] - y[0]);
+      const spans: [number, number][] = [];
+      let lo = tWall;
+      for (const [hLo, hHi] of cuts) {
+        if (hLo > lo) spans.push([lo, Math.min(hLo, tEnd)]);
+        lo = Math.max(lo, hHi);
+      }
+      if (lo < tEnd) spans.push([lo, tEnd]);
+      return spans.filter(([a, b]) => b > a);
+    };
+
     const stride = Math.max(1, Math.floor(dev.length / 420));
-    const cols: { th: number; t: number }[] = [];
-    for (let i = 0; i < dev.length; i += stride) cols.push({ th: dev[i].theta, t: dev[i].v });
+    const cols: { th: number; u: number; t: number }[] = [];
+    for (let i = 0; i < dev.length; i += stride) {
+      cols.push({ th: dev[i].theta, u: dev[i].u, t: dev[i].v });
+    }
 
     const positions: number[] = [], normals: number[] = [], indices: number[] = [];
-    for (const c of cols) {
-      const a = P(c.th, c.t), b = P(c.th, tEnd), n = N(c.th);
-      positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
-      normals.push(n.x, n.y, n.z, n.x, n.y, n.z);
-    }
+    let vi = 0;
+    const push = (th: number, t: number) => {
+      const p = P(th, t), n = N(th);
+      positions.push(p.x, p.y, p.z);
+      normals.push(n.x, n.y, n.z);
+      return vi++;
+    };
+    const emit = (a: (typeof cols)[number], thB: number, b: (typeof cols)[number]) => {
+      const sa = spansAt(a.u, a.t);
+      const sb = spansAt(b.u, b.t);
+      const pair = (s0: [number, number], s1: [number, number]) => {
+        const p0 = push(a.th, s0[0]), p1 = push(a.th, s0[1]);
+        const p2 = push(thB, s1[0]), p3 = push(thB, s1[1]);
+        indices.push(p0, p2, p1, p2, p3, p1);
+      };
+      if (sa.length === sb.length) {
+        for (let k = 0; k < sa.length; k++) pair(sa[k], sb[k]);
+      } else {
+        const dom = sa.length > sb.length ? sa : sb;
+        for (const s of dom) pair(s, s);
+      }
+    };
     const meanStep = (2 * Math.PI) / cols.length;
-    const quad = (i: number, j: number) =>
-      indices.push(2 * i, 2 * j, 2 * i + 1, 2 * j, 2 * j + 1, 2 * i + 1);
     for (let i = 0; i + 1 < cols.length; i++) {
-      if (Math.abs(cols[i + 1].th - cols[i].th) < 4 * meanStep) quad(i, i + 1);
+      if (Math.abs(cols[i + 1].th - cols[i].th) < 4 * meanStep) {
+        emit(cols[i], cols[i + 1].th, cols[i + 1]);
+      }
     }
-    if (cols[0].th + 2 * Math.PI - cols[cols.length - 1].th < 4 * meanStep) quad(cols.length - 1, 0);
+    if (cols[0].th + 2 * Math.PI - cols[cols.length - 1].th < 4 * meanStep) {
+      emit(cols[cols.length - 1], cols[0].th + 2 * Math.PI, cols[0]);
+    }
 
     const geom = new THREE.BufferGeometry();
     geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
@@ -936,7 +1002,8 @@
     const rim: THREE.Vector3[] = [];
     for (let i = 0; i <= 72; i++) rim.push(P((2 * Math.PI * i) / 72, tEnd));
     const endCenter = P(0, tEnd).add(P(Math.PI, tEnd)).multiplyScalar(0.5);
-    return { geom, rim, endCenter };
+    const holeRims = devHoles.map((h) => h.pts.map((p) => P(p.u / fr.r, p.v)));
+    return { geom, rim, endCenter, holeRims };
   }
 
   /**
@@ -1087,7 +1154,7 @@
 
     m.branches.forEach((b, i) => {
       const fr = branchFrame(b);
-      const built = buildBranchTube(fr, b.dev);
+      const built = buildBranchTube(fr, b.dev, b.holes ?? []);
       if (!built) return;
       solidsGroup!.add(new THREE.Mesh(built.geom, solidMaterial(pal.branch)));
       solidsGroup!.add(
@@ -1102,25 +1169,32 @@
         color: "var(--ember)",
         dy: -44,
       });
-      // The cut rim — same emissive accent as the classic modes, but drawn
-      // along the EXACT polyline: the cut can jump along a generatrix at a
-      // main↔neighbour transition, and a smoothed (Catmull-Rom) curve would
-      // swing off the surface there and float in mid-air.
-      if (b.curve3d.length > 2) {
-        const pts = b.curve3d.map((p) => new THREE.Vector3(p.x, p.z, -p.y));
+      // Cut rims drawn along EXACT polylines (no smoothing): the landing
+      // curve on the main tube, plus each crossing contour — both lie on
+      // the surfaces by construction.
+      const rimTube = (rawPts: THREE.Vector3[]) => {
+        if (rawPts.length < 3) return;
+        // Decimate: the rim only needs visual density, and each rebuild
+        // creates several of these — keep the renderer load bounded.
+        const stride = Math.max(1, Math.floor(rawPts.length / 360));
+        const pts = rawPts.filter((_, k) => k % stride === 0);
         const path = new THREE.CurvePath<THREE.Vector3>();
         for (let k = 0; k < pts.length; k++) {
           path.add(new THREE.LineCurve3(pts[k], pts[(k + 1) % pts.length]));
         }
         const tubeGeom = new THREE.TubeGeometry(
           path,
-          Math.min(1440, pts.length * 2),
+          Math.min(720, pts.length),
           Math.max(0.6, r1 * 0.012),
-          10,
+          8,
           true,
         );
         solidsGroup!.add(new THREE.Mesh(tubeGeom, curveMat()));
+      };
+      if (b.curve3d.length > 2) {
+        rimTube(b.curve3d.map((p) => new THREE.Vector3(p.x, p.z, -p.y)));
       }
+      for (const hr of built.holeRims) rimTube(hr);
     });
 
     scene.add(solidsGroup);
@@ -1321,18 +1395,32 @@
     };
   });
 
+  // Coalesce rebuilds: dragging a slider fires many computes per second,
+  // and rebuilding the whole scene for each intermediate value hammers the
+  // renderer for nothing — only the latest result matters.
+  let rebuildTimer: ReturnType<typeof setTimeout> | null = null;
   $effect(() => {
     if (!scene) return;
     void store.theme; // rebuild materials & grid when the theme flips
-    if (store.params.mode === "multi") {
-      if (!store.multiResult) return;
-      applySceneTheme();
-      rebuildSceneMulti(store.multiResult);
-    } else {
-      if (!store.result) return;
-      applySceneTheme();
-      rebuildScene(store.result);
-    }
+    void store.result;
+    void store.multiResult;
+    void store.params.mode;
+    if (rebuildTimer !== null) clearTimeout(rebuildTimer);
+    rebuildTimer = setTimeout(() => {
+      rebuildTimer = null;
+      if (!scene) return;
+      if (store.params.mode === "multi") {
+        if (!store.multiResult) return;
+        applySceneTheme();
+        rebuildSceneMulti(store.multiResult);
+      } else {
+        if (!store.result) return;
+        applySceneTheme();
+        rebuildScene(store.result);
+      }
+      // Drop the renderer's cached lists so disposed geometry is really freed.
+      renderer?.renderLists.dispose();
+    }, 90);
   });
 </script>
 

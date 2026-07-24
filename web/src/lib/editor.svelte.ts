@@ -135,7 +135,9 @@ class EditorStore {
       const mainPts = m.holes.flatMap((h) => h.pts);
       const mainAnnots = this.annotations.filter((a) => a.pattern === "main");
       let pages = this.tilesFor(mainPts, mainAnnots).length;
-      for (const b of m.branches) pages += this.tilesFor(b.dev, []).length;
+      for (const b of m.branches) {
+        pages += this.tilesFor([...b.dev, ...b.holes.flatMap((h) => h.pts)], []).length;
+      }
       return pages;
     }
     if (!store.result) return 0;

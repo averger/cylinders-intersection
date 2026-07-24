@@ -363,15 +363,20 @@ fn build_multi_sheets(doc: &ExportDocument, input: &MultiInput) -> Result<Vec<Sh
         holes: loops,
     });
 
-    // --- One template per branch. ----------------------------------------
+    // --- One template per branch: landing curve + crossing contours. ------
     for (i, br) in payload.branches.iter().enumerate() {
         if br.dev.is_empty() {
             continue;
         }
         let cut: Vec<(f64, f64)> = br.dev.iter().map(|p| (p.u, p.v)).collect();
+        let branch_holes: Vec<(Vec<(f64, f64)>, bool)> = br
+            .holes
+            .iter()
+            .map(|h| (h.pts.iter().map(|p| (p.u, p.v)).collect(), h.closed))
+            .collect();
         let (mut u0, mut u1, mut v0, mut v1) =
             (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
-        for &(u, v) in &cut {
+        for &(u, v) in cut.iter().chain(branch_holes.iter().flat_map(|(pts, _)| pts.iter())) {
             u0 = u0.min(u);
             u1 = u1.max(u);
             v0 = v0.min(v);
@@ -387,7 +392,10 @@ fn build_multi_sheets(doc: &ExportDocument, input: &MultiInput) -> Result<Vec<Sh
             br.psi.to_degrees()
         );
         if br.cut_by_neighbor {
-            meta.push_str(" — couture mutuelle incluse");
+            meta.push_str(&format!(
+                " — {} découpe(s) de traversée",
+                branch_holes.len()
+            ));
         }
         sheets.push(Sheet {
             kind: PatternKind::Branch,
@@ -401,7 +409,7 @@ fn build_multi_sheets(doc: &ExportDocument, input: &MultiInput) -> Result<Vec<Sh
             bbox: (u0.min(fstart), v0, u1.max(fstart + circb), v1),
             cut_bbox: (u0, v0, u1, v1),
             annotations: Vec::new(),
-            holes: Vec::new(),
+            holes: branch_holes,
         });
     }
 

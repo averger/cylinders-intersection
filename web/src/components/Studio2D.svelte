@@ -30,7 +30,8 @@
           data={{
             points: b.dev,
             closed: false,
-            title: `Piquage ${i + 1} — Ø ${(b.r * 2).toFixed(0)}${b.cut_by_neighbor ? " · couture mutuelle" : ""}`,
+            holes: b.holes.map((h) => ({ pts: h.pts, closed: h.closed })),
+            title: `Piquage ${i + 1} — Ø ${(b.r * 2).toFixed(0)}${b.cut_by_neighbor ? " · découpe de traversée" : ""}`,
             diameter: b.r * 2,
             circumference: b.circumference,
             accent: "var(--ember)",

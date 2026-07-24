@@ -71,7 +71,10 @@ export interface MultiBranchResult {
   z: number;
   phi: number;
   psi: number;
+  /** Landing curve on the main tube (open, one period). */
   dev: DevPoint[];
+  /** Crossing contours carved by neighbours (closed), same dev plane. */
+  holes: HoleResult[];
   curve3d: Point3[];
   bbox: BBox2 | null;
   circumference: number;

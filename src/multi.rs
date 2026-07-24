@@ -59,20 +59,30 @@ fn default_samples() -> usize {
 }
 
 /// Developed template of one branch plus its 3D rim.
+///
+/// The kept surface of a branch is the boolean `outside every neighbour`:
+/// its lower boundary is the landing curve on the main tube (`dev`), and
+/// each neighbour crossing the branch carves a closed contour (`holes`) —
+/// exactly like the gueule de loup on the main tube.  The walls of two
+/// crossing branches then kiss along their common intersection curve: the
+/// joint closes, every tube hugs the main tube all around.
 #[derive(Debug, Clone, Serialize)]
 pub struct MultiBranchResult {
     pub r: f64,
     pub z: f64,
     pub phi: f64,
     pub psi: f64,
-    /// Template: `u = r·θ`, `v = t_cut(θ)` — open curve over one period.
+    /// Landing curve on the main tube: `u = r·θ`, `v = t_wall(θ)` — open
+    /// curve over one period.
     pub dev: Vec<DevPoint>,
-    /// 3D rim of the cut (world coordinates, mm).
+    /// Crossing contours carved by the neighbours, in the same developed
+    /// plane (`HoleResult::branch` = index of the crossing neighbour).
+    pub holes: Vec<HoleResult>,
+    /// 3D rim of the landing curve (world coordinates, mm).
     pub curve3d: Vec<Point3>,
     pub bbox: Option<BBox2>,
     pub circumference: f64,
-    /// True where a neighbouring branch (not the main tube) shapes part of
-    /// the cut — the template carries the mutual seam.
+    /// True when at least one neighbour crosses this branch.
     pub cut_by_neighbor: bool,
 }
 
@@ -145,13 +155,27 @@ fn entry_into_main(b: &Vector3<f64>, d: &Vector3<f64>, r1: f64) -> Option<f64> {
     entry_root(a, bb, c)
 }
 
-/// Entry of the generatrix line `B + t·d` into the (infinite) cylinder of
-/// branch `other`: distance to its axis equals its radius.
-fn entry_into_branch(b: &Vector3<f64>, d: &Vector3<f64>, other: &BranchFrame) -> Option<f64> {
+/// Interval `t ∈ (t_lo, t_hi)` where the generatrix line `B + t·d` runs
+/// INSIDE the (infinite) cylinder of branch `other` — both roots of the
+/// distance-to-axis quadratic.  `None` when the line misses the cylinder.
+fn branch_interval(
+    b: &Vector3<f64>,
+    d: &Vector3<f64>,
+    other: &BranchFrame,
+) -> Option<(f64, f64)> {
     let m0 = b - other.c;
     let e = d - other.d * d.dot(&other.d);
     let m = m0 - other.d * m0.dot(&other.d);
-    entry_root(e.dot(&e), 2.0 * m.dot(&e), m.dot(&m) - other.r * other.r)
+    let (a, bb, c) = (e.dot(&e), 2.0 * m.dot(&e), m.dot(&m) - other.r * other.r);
+    if a.abs() < 1e-14 {
+        return None;
+    }
+    let disc = bb * bb - 4.0 * a * c;
+    if disc < 0.0 {
+        return None;
+    }
+    let sq = disc.sqrt();
+    Some(((-bb - sq) / (2.0 * a), (-bb + sq) / (2.0 * a)))
 }
 
 /// Compute the whole node: one template per branch (first-contact cut) and
@@ -178,55 +202,85 @@ pub fn multi(input: &MultiInput) -> MultiPayload {
                 .fold(f64::INFINITY, f64::min)
         })
         .collect();
-    let above_floor = |j: usize, p: &Vector3<f64>| -> bool {
+    // Axial ceiling: the far end of the tube as modelled (and exported) —
+    // beyond it the neighbour has no material either.
+    let ceilings: Vec<f64> = frames
+        .iter()
+        .map(|f| {
+            let t_hi = (0..n)
+                .filter_map(|k| {
+                    entry_into_main(&f.base(tau * (k as f64) / (n as f64)), &f.d, r1)
+                })
+                .fold(f64::NEG_INFINITY, f64::max);
+            t_hi + (3.0 * f.r).max(90.0)
+        })
+        .collect();
+    let within_material = |j: usize, p: &Vector3<f64>| -> bool {
         let fr = &frames[j];
-        (p - fr.c).dot(&fr.d) >= floors[j] - 1e-6
+        let s = (p - fr.c).dot(&fr.d);
+        s >= floors[j] - 1e-6 && s <= ceilings[j] + 1e-6
     };
 
-    // --- First-contact cuts. ----------------------------------------------
+    // --- Boolean cuts: each branch keeps everything OUTSIDE its
+    // neighbours.  The lower boundary is the landing curve on the main
+    // tube; every neighbour crossing the branch carves a closed contour.
     let mut branches = Vec::with_capacity(frames.len());
     let mut neighbor_pairs: Vec<(usize, usize)> = Vec::new();
 
     for (i, f) in frames.iter().enumerate() {
+        // Landing curve on the main tube.
         let mut dev = Vec::with_capacity(n);
         let mut curve3d = Vec::with_capacity(n);
-        let mut cut_by_neighbor = false;
-
-        for k in 0..n {
+        let mut t_wall = vec![f64::NAN; n];
+        for (k, tw) in t_wall.iter_mut().enumerate() {
             let theta = tau * (k as f64) / (n as f64);
             let base = f.base(theta);
-            let Some(mut t_cut) = entry_into_main(&base, &f.d, r1) else {
+            let Some(t) = entry_into_main(&base, &f.d, r1) else {
                 continue;
             };
-
-            for (j, other) in frames.iter().enumerate() {
-                if j == i {
-                    continue;
-                }
-                if let Some(t_j) = entry_into_branch(&base, &f.d, other) {
-                    if t_j > t_cut {
-                        // A neighbour contact only counts outside the main
-                        // tube and above the neighbour's axial floor.
-                        let p = base + t_j * f.d;
-                        if p.x * p.x + p.y * p.y >= r1 * r1 * (1.0 - 1e-9)
-                            && above_floor(j, &p)
-                        {
-                            t_cut = t_j;
-                            cut_by_neighbor = true;
-                            if !neighbor_pairs.contains(&(i.min(j), i.max(j))) {
-                                neighbor_pairs.push((i.min(j), i.max(j)));
-                            }
-                        }
-                    }
-                }
-            }
-
-            let p = base + t_cut * f.d;
-            curve3d.push(Point3::from(p));
-            dev.push(DevPoint { theta, u: f.r * theta, v: t_cut });
+            *tw = t;
+            curve3d.push(Point3::from(base + t * f.d));
+            dev.push(DevPoint { theta, u: f.r * theta, v: t });
         }
 
-        let bbox = BBox2::from_points(dev.iter().map(|p| (p.u, p.v)));
+        // Crossing contour of each neighbour: interval (t_lo, t_hi) inside
+        // the neighbour cylinder, kept only where it bites above the
+        // landing curve and above the neighbour's axial floor.
+        let mut holes_i: Vec<HoleResult> = Vec::new();
+        for (j, other) in frames.iter().enumerate() {
+            if j == i {
+                continue;
+            }
+            let intervals: Vec<Option<(f64, f64)>> = (0..n)
+                .map(|k| {
+                    let theta = tau * (k as f64) / (n as f64);
+                    let base = f.base(theta);
+                    branch_interval(&base, &f.d, other).and_then(|(lo, hi)| {
+                        if !t_wall[k].is_finite() || hi <= t_wall[k] + 1e-9 {
+                            return None; // entirely below the landing cut
+                        }
+                        let mid = base + 0.5 * (lo.max(t_wall[k]) + hi) * f.d;
+                        if !within_material(j, &mid) {
+                            return None; // phantom infinite-cylinder extension
+                        }
+                        Some((lo, hi))
+                    })
+                })
+                .collect();
+            for contour in blob_contours(&intervals, f.r, tau) {
+                let bbox = BBox2::from_points(contour.iter().map(|p| (p.u, p.v)));
+                holes_i.push(HoleResult { branch: j, pts: contour, closed: true, bbox });
+                if !neighbor_pairs.contains(&(i.min(j), i.max(j))) {
+                    neighbor_pairs.push((i.min(j), i.max(j)));
+                }
+            }
+        }
+
+        let bbox = BBox2::from_points(
+            dev.iter()
+                .chain(holes_i.iter().flat_map(|h| h.pts.iter()))
+                .map(|p| (p.u, p.v)),
+        );
         let spec = &input.branches[i];
         branches.push(MultiBranchResult {
             r: spec.r,
@@ -234,10 +288,11 @@ pub fn multi(input: &MultiInput) -> MultiPayload {
             phi: spec.phi,
             psi: spec.psi,
             dev,
+            cut_by_neighbor: !holes_i.is_empty(),
+            holes: holes_i,
             curve3d,
             bbox,
             circumference: std::f64::consts::TAU * spec.r,
-            cut_by_neighbor,
         });
     }
 
@@ -277,7 +332,7 @@ pub fn multi(input: &MultiInput) -> MultiPayload {
     let mut warnings = Vec::new();
     for &(i, j) in &neighbor_pairs {
         warnings.push(format!(
-            "Les piquages {} et {} se rencontrent avant le tube principal — leurs gabarits portent la couture mutuelle.",
+            "Les piquages {} et {} se traversent — chaque gabarit porte la découpe du passage de l'autre, leurs parois s'épousent le long de la couture.",
             i + 1,
             j + 1
         ));
@@ -298,6 +353,61 @@ pub fn multi(input: &MultiInput) -> MultiPayload {
         holes,
         warnings,
     }
+}
+
+/// Closed contour(s) of a neighbour crossing, from the per-generatrix
+/// inside-intervals: upper lip forward, lower lip backward — the same
+/// traversal-order construction as the gueule de loup.  A neighbour
+/// swallowing the whole circumference yields two separate rings.
+fn blob_contours(intervals: &[Option<(f64, f64)>], r: f64, tau: f64) -> Vec<Vec<DevPoint>> {
+    let n = intervals.len();
+    let valid_count = intervals.iter().filter(|iv| iv.is_some()).count();
+    if valid_count < 3 {
+        return Vec::new();
+    }
+    let theta_at = |k: usize, wrap: bool| tau * (k as f64) / (n as f64) + if wrap { tau } else { 0.0 };
+
+    if valid_count == n {
+        // Full ring: the neighbour pierces at every generatrix — two loops.
+        let mut upper = Vec::with_capacity(n);
+        let mut lower = Vec::with_capacity(n);
+        for (k, iv) in intervals.iter().enumerate() {
+            let (lo, hi) = iv.unwrap();
+            let theta = theta_at(k, false);
+            upper.push(DevPoint { theta, u: r * theta, v: hi });
+            lower.push(DevPoint { theta, u: r * theta, v: lo });
+        }
+        return vec![upper, lower];
+    }
+
+    // Contiguous circular runs of valid generatrices.
+    let start = (0..n)
+        .find(|&k| intervals[k].is_none() && intervals[(k + 1) % n].is_some())
+        .expect("mixed validity implies a boundary");
+    let mut contours = Vec::new();
+    let mut run: Vec<(usize, bool)> = Vec::new();
+    for off in 1..=n {
+        let k = (start + off) % n;
+        let wrapped = start + off >= n;
+        if intervals[k].is_some() {
+            run.push((k, wrapped));
+        } else if !run.is_empty() {
+            if run.len() >= 3 {
+                let mut contour = Vec::with_capacity(run.len() * 2);
+                for &(k, wrap) in &run {
+                    let theta = theta_at(k, wrap);
+                    contour.push(DevPoint { theta, u: r * theta, v: intervals[k].unwrap().1 });
+                }
+                for &(k, wrap) in run.iter().rev() {
+                    let theta = theta_at(k, wrap);
+                    contour.push(DevPoint { theta, u: r * theta, v: intervals[k].unwrap().0 });
+                }
+                contours.push(contour);
+            }
+            run.clear();
+        }
+    }
+    contours
 }
 
 // ---------------------------------------------------------------------
@@ -531,54 +641,85 @@ mod tests {
         }
     }
 
-    #[test]
-    fn v_node_branches_cut_each_other() {
-        // Two branches leaning towards each other (φ and π−φ) close enough to
-        // meet above the main tube: the mutual seam must lengthen the cut
-        // (larger t) somewhere, and never shorten it.
+    /// Map a developed point of a branch back to 3D world coordinates.
+    fn to_world(spec: &MultiBranchSpec, p: &DevPoint) -> nalgebra::Vector3<f64> {
+        let m = crate::geometry::rot_z(spec.psi) * crate::geometry::rot_x(spec.phi);
+        let theta = p.u / spec.r;
+        let base = nalgebra::Vector3::new(0.0, 0.0, spec.z)
+            + spec.r
+                * (theta.cos() * (m * nalgebra::Vector3::x())
+                    + theta.sin() * (m * nalgebra::Vector3::y()));
+        base + p.v * (m * nalgebra::Vector3::z())
+    }
+
+    fn v_specs() -> Vec<MultiBranchSpec> {
         let phi = std::f64::consts::FRAC_PI_4;
-        let mk = |z: f64, phi: f64| MultiBranchSpec { r: 25.0, z, phi, psi: 0.0 };
-        let node = multi(&MultiInput {
-            r1: 40.0,
-            branches: vec![mk(-45.0, phi), mk(45.0, std::f64::consts::PI - phi)],
-            n_samples: 720,
-        });
-        assert!(node.branches[0].cut_by_neighbor, "la branche 1 doit être coupée par la 2");
-        assert!(node.branches[1].cut_by_neighbor);
+        vec![
+            MultiBranchSpec { r: 25.0, z: -45.0, phi, psi: 0.0 },
+            MultiBranchSpec { r: 25.0, z: 45.0, phi: std::f64::consts::PI - phi, psi: 0.0 },
+        ]
+    }
+
+    #[test]
+    fn crossing_branches_carve_each_other_and_keep_their_landing() {
+        // Boolean model: the landing curve on the main tube is NEVER
+        // altered by a neighbour — the crossing carves a closed contour
+        // instead, so every tube hugs the main tube all around.
+        let node = multi(&MultiInput { r1: 40.0, branches: v_specs(), n_samples: 720 });
+        assert!(node.branches[0].cut_by_neighbor && node.branches[1].cut_by_neighbor);
+        assert!(!node.branches[0].holes.is_empty(), "contour de traversée attendu");
         assert!(!node.warnings.is_empty());
 
         let alone = multi(&MultiInput {
             r1: 40.0,
-            branches: vec![mk(-45.0, phi)],
+            branches: vec![v_specs()[0]],
             n_samples: 720,
         });
-        let mut raised = 0usize;
+        assert_eq!(node.branches[0].dev.len(), alone.branches[0].dev.len());
         for (a, b) in node.branches[0].dev.iter().zip(alone.branches[0].dev.iter()) {
-            assert!(a.v >= b.v - 1e-9, "la couture ne peut que raccourcir le tube");
-            if a.v > b.v + 1e-6 {
-                raised += 1;
-            }
+            assert!((a.v - b.v).abs() < 1e-12, "l'atterrissage ne doit pas bouger");
         }
-        assert!(raised > 10, "la couture mutuelle doit modifier une plage de θ ({raised})");
     }
 
     #[test]
-    fn mutual_seam_is_symmetric_for_a_symmetric_v() {
-        // Same V-node: by symmetry (z ↔ −z), the two templates must be
-        // identical up to the θ ↦ −θ reflection of their seam.
-        let phi = std::f64::consts::FRAC_PI_4;
-        let mk = |z: f64, phi: f64| MultiBranchSpec { r: 25.0, z, phi, psi: 0.0 };
-        let node = multi(&MultiInput {
-            r1: 40.0,
-            branches: vec![mk(-45.0, phi), mk(45.0, std::f64::consts::PI - phi)],
-            n_samples: 720,
-        });
-        let d0 = &node.branches[0].dev;
-        let d1 = &node.branches[1].dev;
-        for p in d0.iter().step_by(16) {
-            let mirrored = (std::f64::consts::TAU - p.theta).rem_euclid(std::f64::consts::TAU);
-            let v1 = v_at(d1, mirrored);
-            assert!((p.v - v1).abs() < 1e-6, "θ={} : {} vs {}", p.theta, p.v, v1);
+    fn crossing_contours_of_both_branches_coincide_in_3d() {
+        // THE closure property: the contour carved on branch 1 by branch 2
+        // and the contour carved on branch 2 by branch 1 both lie on the
+        // same 3D intersection curve of the two cylinders — the walls kiss,
+        // the joint has NO gap.
+        let specs = v_specs();
+        let node = multi(&MultiInput { r1: 40.0, branches: specs.clone(), n_samples: 720 });
+        let blob0: Vec<_> = node.branches[0]
+            .holes
+            .iter()
+            .flat_map(|h| h.pts.iter())
+            .map(|p| to_world(&specs[0], p))
+            .collect();
+        let blob1: Vec<_> = node.branches[1]
+            .holes
+            .iter()
+            .flat_map(|h| h.pts.iter())
+            .map(|p| to_world(&specs[1], p))
+            .collect();
+        assert!(blob0.len() > 100 && blob1.len() > 100);
+        // Every point of blob0 sits on the other polyline (and vice versa).
+        let dist_to = |p: &nalgebra::Vector3<f64>, poly: &[nalgebra::Vector3<f64>]| {
+            let mut best = f64::INFINITY;
+            for w in poly.windows(2) {
+                let ab = w[1] - w[0];
+                let len2 = ab.dot(&ab);
+                let t = if len2 > 0.0 { ((p - w[0]).dot(&ab) / len2).clamp(0.0, 1.0) } else { 0.0 };
+                best = best.min((p - (w[0] + ab * t)).norm());
+            }
+            best
+        };
+        for p in blob0.iter().step_by(7) {
+            let d = dist_to(p, &blob1);
+            assert!(d < 0.6, "point de couture à {d:.3} mm de la paroi voisine");
+        }
+        for p in blob1.iter().step_by(7) {
+            let d = dist_to(p, &blob0);
+            assert!(d < 0.6, "point de couture à {d:.3} mm de la paroi voisine");
         }
     }
 
@@ -687,37 +828,40 @@ mod tests {
         // Sane V-node: axes crossing INSIDE the main tube (|z| < r1/tanφ·…),
         // so both tubes land on the wall around their mutual seam.
         let phi = std::f64::consts::FRAC_PI_4;
-        let node = multi(&MultiInput {
-            r1: 50.0,
-            branches: vec![
-                MultiBranchSpec { r: 30.0, z: -40.0, phi, psi: 0.0 },
-                MultiBranchSpec { r: 30.0, z: 40.0, phi: std::f64::consts::PI - phi, psi: 0.0 },
-            ],
-            n_samples: 720,
-        });
+        let specs = vec![
+            MultiBranchSpec { r: 30.0, z: -40.0, phi, psi: 0.0 },
+            MultiBranchSpec { r: 30.0, z: 40.0, phi: std::f64::consts::PI - phi, psi: 0.0 },
+        ];
+        let node = multi(&MultiInput { r1: 50.0, branches: specs.clone(), n_samples: 720 });
         assert_eq!(node.holes.len(), 1, "les deux lumières fusionnent en enveloppe");
         let env = &node.holes[0].pts;
-        for br in &node.branches {
+        let frames: Vec<BranchFrame> = specs.iter().map(BranchFrame::new).collect();
+        for (i, br) in node.branches.iter().enumerate() {
             let mut checked = 0usize;
-            let mut far = 0usize;
             for p in &br.curve3d {
                 let dist_main = (p.x * p.x + p.y * p.y).sqrt();
                 if (dist_main - 50.0).abs() > 1e-6 {
-                    continue; // seam point, off the wall
+                    continue; // off the wall (should not happen for a landing curve)
+                }
+                // Landing points passing UNDER a neighbour are covered by
+                // that neighbour's opening — the visible rim is the rest.
+                let v = Vector3::new(p.x, p.y, p.z);
+                let inside_neighbor = frames.iter().enumerate().any(|(j, fr)| {
+                    if j == i {
+                        return false;
+                    }
+                    let rel = v - fr.c;
+                    (rel - fr.d * rel.dot(&fr.d)).norm() < fr.r - 1e-6
+                });
+                if inside_neighbor {
+                    continue;
                 }
                 let u = 50.0 * p.y.atan2(p.x);
-                if dist_to_polyline(u, p.z, env) > 0.05 {
-                    far += 1;
-                }
+                let d = dist_to_polyline(u, p.z, env);
+                assert!(d < 0.05, "rive visible à {d:.4} mm du contour d'enveloppe");
                 checked += 1;
             }
-            assert!(checked > 100, "trop peu de points de rive sur le tube ({checked})");
-            // Tolerate a handful of crotch landings inside the envelope
-            // (wall already cut away by the neighbour's bore right there).
-            assert!(
-                far * 20 < checked,
-                "{far}/{checked} points de rive hors du contour d'enveloppe"
-            );
+            assert!(checked > 100, "trop peu de points de rive visibles ({checked})");
         }
     }
 
