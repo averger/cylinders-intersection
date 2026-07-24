@@ -1040,20 +1040,65 @@
             }
           }
           if (vs.length >= 2) {
-            holesHere.push([Math.min(...vs), Math.max(...vs)]);
+            // Even–odd pairing: the clover envelope can cross one column
+            // 4+ times — the wall between two lobes must survive, so each
+            // sorted pair is its own hole, never one big [min, max].
+            vs.sort((x, y) => x - y);
+            for (let k = 0; k + 1 < vs.length; k += 2) {
+              holesHere.push([vs[k], vs[k + 1]]);
+            }
             break;
           }
         }
       }
       holesHere.sort((x, y) => x[0] - y[0]);
-      const spans: [number, number][] = [];
-      let lo = zLo;
+      // Merge overlapping cuts and clamp to the drawn wall band.
+      const merged: [number, number][] = [];
       for (const [hLo, hHi] of holesHere) {
-        if (hLo > lo) spans.push([lo, hLo]);
-        lo = Math.max(lo, hHi);
+        const lo = Math.max(hLo, zLo), hi = Math.min(hHi, zHi);
+        if (hi <= lo) continue;
+        if (merged.length && lo <= merged[merged.length - 1][1]) {
+          merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], hi);
+        } else {
+          merged.push([lo, hi]);
+        }
       }
-      if (lo < zHi) spans.push([lo, zHi]);
-      return spans;
+      return merged;
+    };
+
+    // Pair the holes of two adjacent columns so every quad interpolates
+    // between MATCHED boundaries: a hole that opens, closes, splits or
+    // merges tapers to a point instead of leaving a one-column sliver.
+    const alignHoles = (
+      A0: [number, number][],
+      B0: [number, number][],
+    ): [[number, number][], [number, number][]] => {
+      const A = A0.map((h) => [h[0], h[1]] as [number, number]);
+      const B = B0.map((h) => [h[0], h[1]] as [number, number]);
+      const overlaps = (h: [number, number], k: [number, number]) => h[0] <= k[1] && k[0] <= h[1];
+      const splitOnce = (X: [number, number][], Y: [number, number][]): boolean => {
+        for (let i = 0; i < X.length; i++) {
+          const parts = Y.filter((k) => overlaps(X[i], k));
+          if (parts.length > 1) {
+            const m = (parts[0][1] + parts[1][0]) / 2;
+            X.splice(i, 1, [X[i][0], m], [m, X[i][1]]);
+            return true;
+          }
+        }
+        return false;
+      };
+      while (splitOnce(A, B) || splitOnce(B, A)) {
+        /* until every hole has at most one partner */
+      }
+      for (const h of A) {
+        if (!B.some((k) => overlaps(h, k))) B.push([(h[0] + h[1]) / 2, (h[0] + h[1]) / 2]);
+      }
+      for (const k of B) {
+        if (!A.some((h) => overlaps(h, k))) A.push([(k[0] + k[1]) / 2, (k[0] + k[1]) / 2]);
+      }
+      A.sort((x, y) => x[0] - y[0]);
+      B.sort((x, y) => x[0] - y[0]);
+      return [A, B];
     };
 
     const positions: number[] = [], normals: number[] = [], indices: number[] = [];
@@ -1073,22 +1118,21 @@
 
     const nA = 721;
     let prevA = 0;
-    let prevSpans = spansAt(0);
+    let prevHoles = spansAt(0);
     for (let i = 1; i < nA; i++) {
       const alpha = (2 * Math.PI * i) / (nA - 1);
-      const spans = spansAt(r1 * alpha);
-      if (spans.length === prevSpans.length) {
-        for (let k = 0; k < spans.length; k++) {
-          quadZ(prevA, alpha, prevSpans[k][0], prevSpans[k][1], spans[k][0], spans[k][1]);
-        }
-      } else {
-        // A hole opens or closes inside this hair-thin column: draw the
-        // denser side on both edges (the seam is a fraction of a degree).
-        const dominant = spans.length > prevSpans.length ? spans : prevSpans;
-        for (const [lo, hi] of dominant) quadZ(prevA, alpha, lo, hi, lo, hi);
+      const holes = spansAt(r1 * alpha);
+      const [ha, hb] = alignHoles(prevHoles, holes);
+      // Wall quads between matched hole boundaries, bottom to top.
+      let la = zLo, lb = zLo;
+      for (let k = 0; k < ha.length; k++) {
+        quadZ(prevA, alpha, la, ha[k][0], lb, hb[k][0]);
+        la = ha[k][1];
+        lb = hb[k][1];
       }
+      quadZ(prevA, alpha, la, zHi, lb, zHi);
       prevA = alpha;
-      prevSpans = spans;
+      prevHoles = holes;
     }
 
     const geom = new THREE.BufferGeometry();
@@ -1136,20 +1180,37 @@
       dy: 42,
     });
 
-    // Crisp edge of each opening ON the wall — ties the hole to the branch
-    // rims (otherwise only the far wall is visible through the opening).
+    // Crisp edge of each opening ON the wall, drawn as a solid rim tube —
+    // the same visual language as the branch lips, so the cut contour and
+    // the tubes visibly meet (a hairline was invisible over the opening).
+    const mainRimMat = new THREE.MeshStandardMaterial({
+      color: pal.mainRing,
+      emissive: pal.mainRing,
+      emissiveIntensity: 0.35,
+      metalness: 0.1,
+      roughness: 0.4,
+    });
     for (const h of m.holes) {
-      const pts = h.pts.map((p) => {
+      const raw = h.pts.map((p) => {
         const alpha = p.u / r1;
         return new THREE.Vector3(r1 * Math.cos(alpha), p.v, -r1 * Math.sin(alpha));
       });
-      const geom = new THREE.BufferGeometry().setFromPoints(pts);
-      const mat = new THREE.LineBasicMaterial({
-        color: pal.mainRing,
-        transparent: true,
-        opacity: 0.95,
-      });
-      solidsGroup.add(h.closed ? new THREE.LineLoop(geom, mat) : new THREE.Line(geom, mat));
+      if (raw.length < 3) continue;
+      const stride = Math.max(1, Math.floor(raw.length / 360));
+      const pts = raw.filter((_, k) => k % stride === 0);
+      const path = new THREE.CurvePath<THREE.Vector3>();
+      const segCount = h.closed ? pts.length : pts.length - 1;
+      for (let k = 0; k < segCount; k++) {
+        path.add(new THREE.LineCurve3(pts[k], pts[(k + 1) % pts.length]));
+      }
+      const tubeGeom = new THREE.TubeGeometry(
+        path,
+        Math.min(720, pts.length),
+        Math.max(0.5, r1 * 0.01),
+        8,
+        h.closed,
+      );
+      solidsGroup.add(new THREE.Mesh(tubeGeom, mainRimMat.clone()));
     }
 
     const curveMat = () =>

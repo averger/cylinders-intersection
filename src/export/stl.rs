@@ -19,6 +19,8 @@ use crate::intersection::{cyl_cyl, cyl_plane, DevPoint};
 use crate::multi::multi;
 
 type Tri = [Vector3<f64>; 3];
+/// A `(lo, hi)` interval along the tube axis, mm.
+type Span = (f64, f64);
 
 /// Wall of a cylinder of radius `r` around `Oz`, spanning `z ∈ [z_lo, z_hi]`,
 /// minus the openings given as developed loops `(u, v)` (u periodic 2πr).
@@ -46,62 +48,111 @@ fn main_wall(
                     }
                 }
                 if vs.len() >= 2 {
-                    let lo = vs.iter().cloned().fold(f64::INFINITY, f64::min);
-                    let hi = vs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-                    cuts.push((lo, hi));
+                    // Even–odd pairing: a non-convex envelope (clover of
+                    // merged openings) can cross one column 4+ times — the
+                    // wall BETWEEN two lobes must survive, so each sorted
+                    // pair is its own cut, never one big [min, max].
+                    vs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                    for pair in vs.chunks(2) {
+                        if pair.len() == 2 {
+                            cuts.push((pair[0], pair[1]));
+                        }
+                    }
                     break 'shift;
                 }
             }
         }
         cuts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-        let mut spans = Vec::new();
-        let mut lo = z_lo;
+        // Merge overlapping cuts and clamp to the exported wall band.
+        let mut merged: Vec<(f64, f64)> = Vec::new();
         for &(h_lo, h_hi) in &cuts {
-            if h_lo > lo {
-                spans.push((lo, h_lo));
+            let (lo, hi) = (h_lo.max(z_lo), h_hi.min(z_hi));
+            if hi <= lo {
+                continue;
             }
-            lo = lo.max(h_hi);
+            match merged.last_mut() {
+                Some(last) if lo <= last.1 => last.1 = last.1.max(hi),
+                _ => merged.push((lo, hi)),
+            }
         }
-        if lo < z_hi {
-            spans.push((lo, z_hi));
-        }
-        spans
+        merged
     };
+
+    // Pair the openings of two adjacent columns so every quad interpolates
+    // between MATCHED boundaries: an opening that starts, ends, splits or
+    // merges tapers to a point instead of leaving a one-column sliver.
+    fn align_holes(a0: &[Span], b0: &[Span]) -> (Vec<Span>, Vec<Span>) {
+        let mut a: Vec<Span> = a0.to_vec();
+        let mut b: Vec<Span> = b0.to_vec();
+        let overlaps = |h: (f64, f64), k: (f64, f64)| h.0 <= k.1 && k.0 <= h.1;
+        fn split_once(
+            x: &mut Vec<Span>,
+            y: &[Span],
+            overlaps: impl Fn(Span, Span) -> bool,
+        ) -> bool {
+            for i in 0..x.len() {
+                let parts: Vec<Span> =
+                    y.iter().copied().filter(|&k| overlaps(x[i], k)).collect();
+                if parts.len() > 1 {
+                    let m = (parts[0].1 + parts[1].0) / 2.0;
+                    let (lo, hi) = x[i];
+                    x.splice(i..=i, [(lo, m), (m, hi)]);
+                    return true;
+                }
+            }
+            false
+        }
+        while split_once(&mut a, &b, overlaps) || split_once(&mut b, &a, overlaps) {}
+        let mids: Vec<Span> = a
+            .iter()
+            .filter(|&&h| !b.iter().any(|&k| overlaps(h, k)))
+            .map(|&(lo, hi)| ((lo + hi) / 2.0, (lo + hi) / 2.0))
+            .collect();
+        b.extend(mids);
+        let mids: Vec<Span> = b
+            .iter()
+            .filter(|&&k| !a.iter().any(|&h| overlaps(h, k)))
+            .map(|&(lo, hi)| ((lo + hi) / 2.0, (lo + hi) / 2.0))
+            .collect();
+        a.extend(mids);
+        a.sort_by(|x, y| x.0.partial_cmp(&y.0).unwrap());
+        b.sort_by(|x, y| x.0.partial_cmp(&y.0).unwrap());
+        (a, b)
+    }
 
     let n_a = 720usize;
     let point = |alpha: f64, z: f64| {
         Vector3::new(r * alpha.cos(), r * alpha.sin(), z)
     };
     let mut prev_alpha = 0.0f64;
-    let mut prev_spans = spans_at(0.0);
+    let mut prev_holes = spans_at(0.0);
     for i in 1..=n_a {
         let alpha = std::f64::consts::TAU * (i as f64) / (n_a as f64);
-        let spans = spans_at(r * alpha);
-        if spans.len() == prev_spans.len() {
-            for (sa, sb) in prev_spans.iter().zip(spans.iter()) {
-                quad(
-                    point(prev_alpha, sa.0),
-                    point(prev_alpha, sa.1),
-                    point(alpha, sb.0),
-                    point(alpha, sb.1),
-                    out,
-                );
-            }
-        } else {
-            // An opening starts/ends inside this hair-thin column.
-            let dominant = if spans.len() > prev_spans.len() { &spans } else { &prev_spans };
-            for s in dominant {
-                quad(
-                    point(prev_alpha, s.0),
-                    point(prev_alpha, s.1),
-                    point(alpha, s.0),
-                    point(alpha, s.1),
-                    out,
-                );
-            }
+        let holes = spans_at(r * alpha);
+        let (ha, hb) = align_holes(&prev_holes, &holes);
+        // Wall quads between matched opening boundaries, bottom to top.
+        let mut la = z_lo;
+        let mut lb = z_lo;
+        for (h, k) in ha.iter().zip(hb.iter()) {
+            quad(
+                point(prev_alpha, la),
+                point(prev_alpha, h.0),
+                point(alpha, lb),
+                point(alpha, k.0),
+                out,
+            );
+            la = h.1;
+            lb = k.1;
         }
+        quad(
+            point(prev_alpha, la),
+            point(prev_alpha, z_hi),
+            point(alpha, lb),
+            point(alpha, z_hi),
+            out,
+        );
         prev_alpha = alpha;
-        prev_spans = spans;
+        prev_holes = holes;
     }
 }
 
@@ -224,8 +275,14 @@ fn branch_wall(
 
 /// Two triangles for the quad (a0→a1) × (b0→b1).
 fn quad(a0: Vector3<f64>, a1: Vector3<f64>, b0: Vector3<f64>, b1: Vector3<f64>, out: &mut Vec<Tri>) {
-    out.push([a0, b0, a1]);
-    out.push([b0, b1, a1]);
+    // Tapered hole seams collapse one or both edges: emit only the
+    // triangles that still carry area.
+    let area = |t: &Tri| 0.5 * (t[1] - t[0]).cross(&(t[2] - t[0])).norm();
+    for t in [[a0, b0, a1], [b0, b1, a1]] {
+        if area(&t) > 1e-9 {
+            out.push(t);
+        }
+    }
 }
 
 /// Build the whole assembly for any source mode.
