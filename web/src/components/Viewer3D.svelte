@@ -1259,11 +1259,78 @@
         ),
       );
       anchors.push({
-        text: `P${i + 1} · Ø ${(b.r * 2).toFixed(0)} · φ ${((b.phi * 180) / Math.PI).toFixed(0)}°`,
+        text: `P${i + 1} · Ø ${(b.r * 2).toFixed(0)}`,
         pos: built.endCenter,
         color: "var(--ember)",
         dy: -44,
       });
+
+      // The angles of the study, protractor-style at the node — staggered
+      // radii so several branches stay readable side by side.
+      {
+        const origin = new THREE.Vector3(0, b.z, 0);
+        const rArc = Math.max(r1 * 1.8, 64) * (1 + 0.24 * i);
+        const sinP = Math.sin(b.psi), cosP = Math.cos(b.psi);
+        // φ: sweep from the main axis (+Z math) to the branch axis, in
+        // their common plane — math dir(s) = cos s·e_z + sin s·(sinψ, −cosψ, 0).
+        annotGroup!.add(
+          angleSector(
+            origin,
+            (s) => new THREE.Vector3(sinP * Math.sin(s), Math.cos(s), cosP * Math.sin(s)),
+            b.phi,
+            rArc * 0.6,
+            rArc,
+            pal.curve,
+          ),
+        );
+        const midP = b.phi / 2;
+        anchors.push({
+          text: `φ${i + 1} = ${((b.phi * 180) / Math.PI).toFixed(1)}°`,
+          pos: origin
+            .clone()
+            .add(
+              new THREE.Vector3(
+                sinP * Math.sin(midP),
+                Math.cos(midP),
+                cosP * Math.sin(midP),
+              ).multiplyScalar(rArc * 0.82),
+            ),
+          color: "var(--ember)",
+          dy: 0,
+        });
+        // ψ: azimuth around the main tube, horizontal arc from the ψ = 0
+        // reference — math dir(s) = (sgn·sin s, −cos s, 0).
+        if (Math.abs(b.psi) > 0.01) {
+          const sgn = Math.sign(b.psi);
+          annotGroup!.add(
+            angleSector(
+              origin,
+              (s) => new THREE.Vector3(sgn * Math.sin(s), 0, Math.cos(s)),
+              Math.abs(b.psi),
+              rArc * 0.44,
+              rArc * 0.72,
+              pal.axisMain,
+            ),
+          );
+          const midA = Math.abs(b.psi) / 2;
+          anchors.push({
+            text: `ψ${i + 1} = ${((b.psi * 180) / Math.PI).toFixed(0)}°`,
+            pos: origin
+              .clone()
+              .add(
+                new THREE.Vector3(sgn * Math.sin(midA), 0, Math.cos(midA)).multiplyScalar(
+                  rArc * 0.6,
+                ),
+              ),
+            color: "var(--cyan)",
+            dy: 0,
+          });
+        }
+        // Branch axis line through the node, out to the tube end.
+        annotGroup!.add(
+          axisLine(origin, built.endCenter.clone().multiplyScalar(1.1), pal.axisBranch),
+        );
+      }
       // Cut rims drawn along EXACT polylines (no smoothing): the landing
       // curve on the main tube, plus each crossing contour — both lie on
       // the surfaces by construction.
