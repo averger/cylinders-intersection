@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as THREE from "three";
   import { onMount } from "svelte";
-  import { store } from "../lib/store.svelte";
+  import { store, type Show3D } from "../lib/store.svelte";
   import type { DevPoint, IntersectionPayload, MultiPayload } from "../lib/api";
 
   let container = $state<HTMLDivElement | undefined>(undefined);
@@ -16,6 +16,27 @@
   let solidsGroup: THREE.Group | null = null;
   let annotGroup: THREE.Group | null = null;
   let grid: THREE.GridHelper | null = null;
+
+  // --- 3D layer visibility -------------------------------------------------
+  // Every object added to the scene is tagged with a layer kind; toggling a
+  // layer flips `visible` flags — no geometry rebuild involved.
+  type LayerKind = "main" | "cut" | "curve";
+  function tag<T extends THREE.Object3D>(obj: T, kind: LayerKind): T {
+    obj.userData.kind = kind;
+    return obj;
+  }
+  function applyVisibility() {
+    const s = store.show3d;
+    for (const child of solidsGroup?.children ?? []) {
+      const k = child.userData.kind as LayerKind | undefined;
+      child.visible =
+        k === "main" ? s.main : k === "cut" ? s.cutters : k === "curve" ? s.curves : true;
+    }
+    if (annotGroup) annotGroup.visible = s.axes;
+    if (grid) grid.visible = s.grid;
+    if (labelsEl) labelsEl.style.display = s.labels ? "" : "none";
+    if (leadersEl) leadersEl.style.display = s.labels ? "" : "none";
+  }
 
   // Projected HTML labels (Ø₁, Ø₂, φ…) — DOM managed imperatively for speed.
   interface Anchor {
@@ -566,19 +587,19 @@
 
       // Main tube, pierced with the exact gueule de loup opening.
       const mainMesh = new THREE.Mesh(buildHoledMain(payload, heightMain), solidMaterial(pal.main));
-      solidsGroup.add(mainMesh);
+      solidsGroup.add(tag(mainMesh, "main"));
       const rt = Math.max(0.5, r1 * 0.012);
       for (const s of [-1, 1]) {
         const rg = ring(r1, rt, pal.mainRing);
         rg.rotation.x = Math.PI / 2;
         rg.position.y = s * (heightMain / 2);
-        solidsGroup.add(rg);
+        solidsGroup.add(tag(rg, "main"));
       }
 
       // Branch tube, stopped at its first contact with the main tube.
       const branchGeom = buildTrimmedBranch(payload);
       if (branchGeom) {
-        solidsGroup.add(new THREE.Mesh(branchGeom, solidMaterial(pal.branch)));
+        solidsGroup.add(tag(new THREE.Mesh(branchGeom, solidMaterial(pal.branch)), "cut"));
         // far-end rim of the branch
         let tLo = Infinity, tHi = -Infinity;
         for (const s of payload.dev_branch) {
@@ -595,7 +616,7 @@
         holder.add(rim);
         // Branch axis in three coords is (0, cosφ, +sinφ) — rotation +φ on X.
         holder.rotation.x = phiAngle;
-        solidsGroup.add(holder);
+        solidsGroup.add(tag(holder, "cut"));
 
         annotGroup.add(
           axisLine(
@@ -639,11 +660,11 @@
     } else {
       // Cylinder × plane: the tube stops exactly at the cut.
       const { wall, bottomZ } = buildPlaneCutMain(payload);
-      solidsGroup.add(new THREE.Mesh(wall, solidMaterial(pal.main)));
+      solidsGroup.add(tag(new THREE.Mesh(wall, solidMaterial(pal.main)), "main"));
       const rg = ring(r1, Math.max(0.5, r1 * 0.012), pal.mainRing);
       rg.rotation.x = Math.PI / 2;
       rg.position.y = bottomZ;
-      solidsGroup.add(rg);
+      solidsGroup.add(tag(rg, "main"));
 
       // The cutting plane itself: a pale rectangle with a crisp outline —
       // unmistakably a plane, clearly visible through the translucency.
@@ -670,7 +691,7 @@
         const rect = new THREE.Mesh(rectGeom, rectMat);
         rect.quaternion.copy(q);
         rect.position.y = store.params.z0;
-        solidsGroup.add(rect);
+        solidsGroup.add(tag(rect, "cut"));
 
         const border = new THREE.LineLoop(
           new THREE.BufferGeometry().setFromPoints([
@@ -683,7 +704,7 @@
         );
         border.quaternion.copy(q);
         border.position.y = store.params.z0;
-        solidsGroup.add(border);
+        solidsGroup.add(tag(border, "cut"));
       }
 
       // θ = 0 reference generatrix, traced on the tube itself — the mark
@@ -699,7 +720,7 @@
           ]),
           new THREE.LineBasicMaterial({ color: pal.curve, transparent: true, opacity: 0.95 }),
         );
-        solidsGroup.add(refLine);
+        solidsGroup.add(tag(refLine, "curve"));
         anchors.push({
           text: "génératrice 0° · réf",
           pos: new THREE.Vector3(rr, bottomZ * 0.35 + zTop * 0.65, 0),
@@ -718,7 +739,7 @@
           transparent: true,
           opacity: 0.85,
         });
-        solidsGroup.add(new THREE.Mesh(cap, capMat));
+        solidsGroup.add(tag(new THREE.Mesh(cap, capMat), "cut"));
         const phiYDeg = ((payload.phi_y ?? 0) * 180) / Math.PI;
         anchors.push({
           text:
@@ -838,12 +859,13 @@
         metalness: 0.1,
         roughness: 0.35,
       });
-      solidsGroup.add(new THREE.Mesh(tubeGeom, tubeMat));
+      solidsGroup.add(tag(new THREE.Mesh(tubeGeom, tubeMat), "curve"));
     }
 
     scene.add(solidsGroup);
     scene.add(annotGroup);
     rebuildLabels();
+    applyVisibility();
     fitToScene(payload);
   }
 
@@ -1162,13 +1184,13 @@
     const pad = Math.max(1.6 * r1, 70);
     const zLo = vLo - pad, zHi = vHi + pad;
 
-    solidsGroup.add(new THREE.Mesh(buildHoledMainMulti(m, zLo, zHi), solidMaterial(pal.main)));
+    solidsGroup.add(tag(new THREE.Mesh(buildHoledMainMulti(m, zLo, zHi), solidMaterial(pal.main)), "main"));
     const rt = Math.max(0.5, r1 * 0.012);
     for (const zEnd of [zLo, zHi]) {
       const rg = ring(r1, rt, pal.mainRing);
       rg.rotation.x = Math.PI / 2;
       rg.position.y = zEnd;
-      solidsGroup.add(rg);
+      solidsGroup.add(tag(rg, "main"));
     }
     annotGroup.add(
       axisLine(new THREE.Vector3(0, zLo - 20, 0), new THREE.Vector3(0, zHi + 20, 0), pal.axisMain),
@@ -1210,7 +1232,7 @@
         8,
         h.closed,
       );
-      solidsGroup.add(new THREE.Mesh(tubeGeom, mainRimMat.clone()));
+      solidsGroup.add(tag(new THREE.Mesh(tubeGeom, mainRimMat.clone()), "curve"));
     }
 
     const curveMat = () =>
@@ -1226,11 +1248,14 @@
       const fr = branchFrame(b);
       const built = buildBranchTube(fr, b.dev, b.holes ?? []);
       if (!built) return;
-      solidsGroup!.add(new THREE.Mesh(built.geom, solidMaterial(pal.branch)));
+      solidsGroup!.add(tag(new THREE.Mesh(built.geom, solidMaterial(pal.branch)), "cut"));
       solidsGroup!.add(
-        new THREE.LineLoop(
-          new THREE.BufferGeometry().setFromPoints(built.rim),
-          new THREE.LineBasicMaterial({ color: pal.branch, transparent: true, opacity: 0.9 }),
+        tag(
+          new THREE.LineLoop(
+            new THREE.BufferGeometry().setFromPoints(built.rim),
+            new THREE.LineBasicMaterial({ color: pal.branch, transparent: true, opacity: 0.9 }),
+          ),
+          "cut",
         ),
       );
       anchors.push({
@@ -1260,7 +1285,7 @@
           8,
           closed,
         );
-        solidsGroup!.add(new THREE.Mesh(tubeGeom, curveMat()));
+        solidsGroup!.add(tag(new THREE.Mesh(tubeGeom, curveMat()), "curve"));
       };
       if (b.curve3d.length > 2) {
         rimTube(b.curve3d.map((p) => new THREE.Vector3(p.x, p.z, -p.y)));
@@ -1271,6 +1296,7 @@
     scene.add(solidsGroup);
     scene.add(annotGroup);
     rebuildLabels();
+    applyVisibility();
 
     const box = new THREE.Box3().setFromObject(solidsGroup);
     const size = box.getSize(new THREE.Vector3());
@@ -1493,6 +1519,32 @@
       renderer?.renderLists.dispose();
     }, 90);
   });
+
+  // Layer toggles: pure visibility flips, applied without rebuilding.
+  $effect(() => {
+    void store.show3d;
+    applyVisibility();
+  });
+
+  let showDisplayPanel = $state(false);
+  const displayRows = $derived(
+    [
+      { key: "main", label: "tube principal" },
+      {
+        key: "cutters",
+        label:
+          store.params.mode === "multi"
+            ? "piquages"
+            : store.params.mode === "cyl_plane"
+              ? "plan de coupe"
+              : "tube incliné",
+      },
+      { key: "curves", label: "courbes de coupe" },
+      { key: "labels", label: "étiquettes" },
+      { key: "axes", label: "axes · cotes" },
+      { key: "grid", label: "grille" },
+    ] as { key: keyof Show3D; label: string }[],
+  );
 </script>
 
 <div class="absolute inset-0">
@@ -1521,8 +1573,47 @@
     </svg>
   </div>
 
+  <!-- Display layers panel -->
+  {#if showDisplayPanel}
+    <div
+      class="absolute left-4 bottom-14 z-10 rounded-xl border border-mist p-2 min-w-[190px] shadow-xl"
+      style="background: var(--bg-2); backdrop-filter: none"
+    >
+      {#each displayRows as row (row.key)}
+        <button
+          class="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-carbon/60 transition-colors text-left"
+          onclick={() => store.toggle3d(row.key)}
+          aria-pressed={store.show3d[row.key]}
+        >
+          <span
+            class="w-3 h-3 rounded-[4px] border transition-colors shrink-0"
+            style={store.show3d[row.key]
+              ? "background: var(--ember); border-color: var(--ember)"
+              : "border-color: var(--line-2)"}
+          ></span>
+          <span
+            class="text-[10px] uppercase tracking-[0.14em] {store.show3d[row.key]
+              ? 'text-silver'
+              : 'text-ash/60'}">{row.label}</span
+          >
+        </button>
+      {/each}
+    </div>
+  {/if}
+
   <!-- Bottom toolbar -->
   <div class="absolute left-4 bottom-4 flex items-center gap-2">
+    <button
+      class="pill hover:border-mist transition-colors {showDisplayPanel ? 'text-pearl' : ''}"
+      style={showDisplayPanel
+        ? "border-color: color-mix(in srgb, var(--ember) 45%, transparent)"
+        : ""}
+      onclick={() => (showDisplayPanel = !showDisplayPanel)}
+      aria-pressed={showDisplayPanel}
+      aria-label="Afficher ou masquer des éléments de la scène"
+    >
+      ◧ affichage
+    </button>
     <button
       class="pill hover:border-mist transition-colors {autoRotate ? 'text-pearl' : ''}"
       style={autoRotate ? "border-color: color-mix(in srgb, var(--ember) 45%, transparent)" : ""}

@@ -109,11 +109,26 @@ function makeStudy(name: string): Study {
 
 const STORAGE_KEY = "cylix.studies.v1";
 
+/** Visibility of the 3D scene layers — what the eye needs right now. */
+export interface Show3D {
+  main: boolean;     // main tube (wall, end rings)
+  cutters: boolean;  // inclined tube(s) / plane
+  curves: boolean;   // cut rims and opening contours
+  labels: boolean;   // Ø / φ chips with leader lines
+  axes: boolean;     // axis lines and angle arcs
+  grid: boolean;     // ground grid
+}
+
+export function defaultShow3D(): Show3D {
+  return { main: true, cutters: true, curves: true, labels: true, axes: true, grid: true };
+}
+
 interface PersistShape {
   studies: Study[];
   activeId: string;
   view: View;
   theme?: Theme;
+  show3d?: Show3D;
 }
 
 function load(): PersistShape | null {
@@ -150,6 +165,8 @@ class AppStore {
   view = $state<View>("3d");
   /** Light is the default — dark is the opt-in "mission control" mode. */
   theme = $state<Theme>("light");
+  /** 3D layer visibility (persisted, shared by all studies). */
+  show3d = $state<Show3D>(defaultShow3D());
 
   result = $state<IntersectionPayload | null>(null);
   multiResult = $state<MultiPayload | null>(null);
@@ -170,6 +187,7 @@ class AppStore {
         : saved.studies[0].id;
       this.view = saved.view === "2d" ? "2d" : "3d";
       this.theme = saved.theme === "dark" ? "dark" : "light";
+      if (saved.show3d) this.show3d = { ...defaultShow3D(), ...saved.show3d };
     } else {
       this.activeId = this.studies[0].id;
     }
@@ -241,6 +259,11 @@ class AppStore {
     this.persist();
   }
 
+  toggle3d(key: keyof Show3D) {
+    this.show3d = { ...this.show3d, [key]: !this.show3d[key] };
+    this.persist();
+  }
+
   persist() {
     if (typeof localStorage === "undefined") return;
     if (this.persistTimer) clearTimeout(this.persistTimer);
@@ -250,6 +273,7 @@ class AppStore {
         activeId: this.activeId,
         view: this.view,
         theme: this.theme,
+        show3d: { ...this.show3d },
       };
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
