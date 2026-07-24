@@ -144,15 +144,15 @@ interface **Svelte 5 + Tailwind 4** servie en SPA, vue 3D **Three.js**.
   barre de statut ; **études en onglets** (multi-études, renommage au double-clic,
   copie des paramètres courants, persistance locale) — comme dans pilegroupx.
 * **Mode Multi tube** : N tubes (Ø, position z, inclinaison φ,
-  azimut ψ) sur un même tube principal. Modèle **booléen** : chaque piquage
-  garde tout ce qui est hors de ses voisins — son gabarit porte la sinusoïde
-  d'atterrissage sur le tube principal **plus un contour fermé de découpe**
-  pour chaque voisin qui le traverse, le tout en formules fermées. Les
-  parois de deux tubes qui se croisent s'embrassent le long de leur courbe
-  d'intersection : joint fermé, chaque tube épouse le principal sur tout
-  son pourtour. Le développé du principal porte **toutes les lumières**
-  positionnées (azimut → décalage horizontal exact) ; chevauchements
-  fusionnés en contour d'enveloppe et signalés.
+  azimut ψ) sur un même tube principal. **Tous les tubes s'arrêtent au
+  nœud** : l'ordre de la liste donne la priorité, et chaque piquage pousse
+  depuis son atterrissage sur le tube principal jusqu'au premier piquage
+  prioritaire rencontré — son gabarit porte la sinusoïde d'atterrissage
+  **plus les arcs de selle** où il meurt sur le flanc du prioritaire, le
+  tout en formules fermées (la couture repose exactement sur la paroi qui
+  l'arrête : joint fermé). Le développé du principal porte **toutes les
+  lumières** positionnées (azimut → décalage horizontal exact) ;
+  chevauchements fusionnés en contour d'enveloppe et signalés.
 * **Vue 3D fidèle à la pièce** : chaque cylindre **s'arrête à l'intersection** —
   le tube incliné est maillé jusqu'à son premier contact avec le gros tube
   (selon la lèvre outer/inner choisie), le cylindre principal est percé de la

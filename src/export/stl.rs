@@ -139,7 +139,8 @@ fn branch_wall(
     let spans_at = |k: usize| -> Vec<(f64, f64)> {
         let (lo0, hi0) = if below { (t_end, dev[k].v) } else { (dev[k].v, t_end) };
         let mut cuts: Vec<(f64, f64)> = Vec::new();
-        for (loop_pts, _) in holes {
+        let mut cap = f64::INFINITY;
+        for (loop_pts, closed_flag) in holes {
             'shift: for kk in -2i32..=2 {
                 let uu = dev[k].u + f64::from(kk) * circ;
                 let mut vs: Vec<f64> = Vec::new();
@@ -152,25 +153,32 @@ fn branch_wall(
                         vs.push(a.1 + s * (b.1 - a.1));
                     }
                 }
-                if vs.len() >= 2 {
-                    let lo = vs.iter().cloned().fold(f64::INFINITY, f64::min);
-                    let hi = vs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-                    cuts.push((lo, hi));
+                if !vs.is_empty() {
+                    if *closed_flag && vs.len() >= 2 {
+                        let lo = vs.iter().cloned().fold(f64::INFINITY, f64::min);
+                        let hi = vs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                        cuts.push((lo, hi));
+                    } else if !*closed_flag {
+                        // Open saddle arc: the tube ENDS there (cap).
+                        let v = vs.iter().cloned().fold(f64::INFINITY, f64::min);
+                        cap = cap.min(v);
+                    }
                     break 'shift;
                 }
             }
         }
+        let hi_eff = hi0.min(cap);
         cuts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
         let mut spans = Vec::new();
         let mut lo = lo0;
         for &(h_lo, h_hi) in &cuts {
             if h_lo > lo {
-                spans.push((lo, h_lo.min(hi0)));
+                spans.push((lo, h_lo.min(hi_eff)));
             }
             lo = lo.max(h_hi);
         }
-        if lo < hi0 {
-            spans.push((lo, hi0));
+        if lo < hi_eff {
+            spans.push((lo, hi_eff));
         }
         spans.retain(|(a, b)| b > a);
         spans

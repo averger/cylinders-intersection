@@ -392,10 +392,7 @@ fn build_multi_sheets(doc: &ExportDocument, input: &MultiInput) -> Result<Vec<Sh
             br.psi.to_degrees()
         );
         if br.cut_by_neighbor {
-            meta.push_str(&format!(
-                " — {} découpe(s) de traversée",
-                branch_holes.len()
-            ));
+            meta.push_str(" — coupe en selle sur piquage prioritaire");
         }
         sheets.push(Sheet {
             kind: PatternKind::Branch,

@@ -896,7 +896,7 @@
     geom: THREE.BufferGeometry;
     rim: THREE.Vector3[];
     endCenter: THREE.Vector3;
-    holeRims: THREE.Vector3[][];
+    holeRims: { pts: THREE.Vector3[]; closed: boolean }[];
   } | null {
     if (dev.length < 3) return null;
     let tHi = -Infinity;
@@ -925,21 +925,27 @@
     // Kept spans of one generatrix: [t_wall, tEnd] minus hole intervals.
     const spansAt = (uCol: number, tWall: number): [number, number][] => {
       const cuts: [number, number][] = [];
+      let cap = tEnd;
       for (const h of devHoles) {
+        const segCount = h.closed ? h.pts.length : h.pts.length - 1;
         for (let kk = -2; kk <= 2; kk++) {
           const u = uCol + kk * circ;
           const vs: number[] = [];
-          const m = h.pts.length;
-          for (let idx = 0; idx < m; idx++) {
+          for (let idx = 0; idx < segCount; idx++) {
             const a = h.pts[idx];
-            const b = h.pts[(idx + 1) % m];
+            const b = h.pts[(idx + 1) % h.pts.length];
             if ((a.u - u) * (b.u - u) < 0) {
               const s = (u - a.u) / (b.u - a.u);
               vs.push(a.v + s * (b.v - a.v));
             }
           }
-          if (vs.length >= 2) {
-            cuts.push([Math.min(...vs), Math.max(...vs)]);
+          if (vs.length > 0) {
+            if (h.closed && vs.length >= 2) {
+              cuts.push([Math.min(...vs), Math.max(...vs)]);
+            } else if (!h.closed) {
+              // Open saddle arc: the tube ENDS there (cap).
+              cap = Math.min(cap, Math.min(...vs));
+            }
             break;
           }
         }
@@ -948,10 +954,10 @@
       const spans: [number, number][] = [];
       let lo = tWall;
       for (const [hLo, hHi] of cuts) {
-        if (hLo > lo) spans.push([lo, Math.min(hLo, tEnd)]);
+        if (hLo > lo) spans.push([lo, Math.min(hLo, cap)]);
         lo = Math.max(lo, hHi);
       }
-      if (lo < tEnd) spans.push([lo, tEnd]);
+      if (lo < cap) spans.push([lo, cap]);
       return spans.filter(([a, b]) => b > a);
     };
 
@@ -1002,7 +1008,10 @@
     const rim: THREE.Vector3[] = [];
     for (let i = 0; i <= 72; i++) rim.push(P((2 * Math.PI * i) / 72, tEnd));
     const endCenter = P(0, tEnd).add(P(Math.PI, tEnd)).multiplyScalar(0.5);
-    const holeRims = devHoles.map((h) => h.pts.map((p) => P(p.u / fr.r, p.v)));
+    const holeRims = devHoles.map((h) => ({
+      pts: h.pts.map((p) => P(p.u / fr.r, p.v)),
+      closed: h.closed,
+    }));
     return { geom, rim, endCenter, holeRims };
   }
 
@@ -1172,14 +1181,15 @@
       // Cut rims drawn along EXACT polylines (no smoothing): the landing
       // curve on the main tube, plus each crossing contour — both lie on
       // the surfaces by construction.
-      const rimTube = (rawPts: THREE.Vector3[]) => {
+      const rimTube = (rawPts: THREE.Vector3[], closed = true) => {
         if (rawPts.length < 3) return;
         // Decimate: the rim only needs visual density, and each rebuild
         // creates several of these — keep the renderer load bounded.
         const stride = Math.max(1, Math.floor(rawPts.length / 360));
         const pts = rawPts.filter((_, k) => k % stride === 0);
         const path = new THREE.CurvePath<THREE.Vector3>();
-        for (let k = 0; k < pts.length; k++) {
+        const segCount = closed ? pts.length : pts.length - 1;
+        for (let k = 0; k < segCount; k++) {
           path.add(new THREE.LineCurve3(pts[k], pts[(k + 1) % pts.length]));
         }
         const tubeGeom = new THREE.TubeGeometry(
@@ -1187,14 +1197,14 @@
           Math.min(720, pts.length),
           Math.max(0.6, r1 * 0.012),
           8,
-          true,
+          closed,
         );
         solidsGroup!.add(new THREE.Mesh(tubeGeom, curveMat()));
       };
       if (b.curve3d.length > 2) {
         rimTube(b.curve3d.map((p) => new THREE.Vector3(p.x, p.z, -p.y)));
       }
-      for (const hr of built.holeRims) rimTube(hr);
+      for (const hr of built.holeRims) rimTube(hr.pts, hr.closed);
     });
 
     scene.add(solidsGroup);

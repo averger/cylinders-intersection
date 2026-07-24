@@ -327,24 +327,28 @@ piquage $i$ passe par $C_i = (0, 0, z_i)$ avec la direction
 $d_i = R_z(\psi_i)\,R_x(\varphi_i)\,e_z$, et sa génératrice d'angle $\theta$
 est la droite $P(t) = C_i + r_i(\cos\theta\,u_i + \sin\theta\,w_i) + t\,d_i$.
 
-La surface conservée du piquage $i$ est le **booléen** « hors de tout
-voisin » : sa frontière basse est la courbe d'atterrissage sur le tube
-principal, $v(\theta) = t^{+}_{\text{principal}}(\theta)$ (plus grande
-racine du trinôme droite–cylindre, jamais modifiée par les voisins), et
-chaque voisin $j$ qui traverse le piquage y découpe un **contour fermé** :
-la génératrice de $i$ est à l'intérieur du cylindre $j$ sur l'intervalle
-$(t^{-}_{j}(\theta),\ t^{+}_{j}(\theta))$ entre les deux racines de son
-trinôme, et le lieu de ces deux lèvres, parcouru dans l'ordre de $\theta$,
-est un contour exact — le strict analogue de la gueule de loup (§3.2)
-transposé sur le piquage. Un intervalle n'est retenu que s'il mord
-au-dessus de la courbe d'atterrissage et dans la **longueur physique** du
-voisin (entre son plancher et son plafond axiaux — l'extension infinie du
-cylindre ne coupe pas).
+Chaque piquage **s'arrête au nœud** : aucun tube ne traverse un autre.
+Comme deux cylindres qui se croisent ne peuvent pas *tous deux* s'arrêter
+l'un sur l'autre en refermant le joint (les deux calottes « je m'arrête au
+premier contact » vivent sur des portions différentes de la courbe
+d'intersection — elles ne coïncident pas), il faut une **convention de
+priorité** : l'ordre de la liste. Le piquage $i$ pousse depuis sa courbe
+d'atterrissage sur le tube principal, $v(\theta) = t^{+}_{\text{principal}}(\theta)$
+(plus grande racine du trinôme droite–cylindre, jamais modifiée), et sa
+génératrice s'arrête sur le **premier piquage prioritaire** $j < i$ qu'elle
+rencontre : $t_{\text{stop}}(\theta) = \min_{j<i} t^{-}_{j}(\theta)$, la
+petite racine du trinôme du voisin — le point d'entrée dans sa paroi. Une
+génératrice déjà à l'intérieur d'un prioritaire à l'atterrissage
+($t^{-}_{j} \le v(\theta)$) est **morte** : elle n'existe pas dans la pièce.
+Un voisin ne coupe que dans sa **longueur physique** (entre son plancher et
+son plafond axiaux — l'extension infinie du cylindre ne coupe pas).
 
-Les parois de deux piquages qui se traversent s'arrêtent ainsi toutes deux
-sur la **même courbe d'intersection** de leurs cylindres : elles
-s'embrassent le long de la couture, le joint est fermé, et chaque tube
-épouse le tube principal sur tout son pourtour.
+Le lieu des points d'arrêt, parcouru dans l'ordre de $\theta$, forme des
+**arcs de selle ouverts** sur le développé du piquage $i$ : sa lèvre haute.
+Chaque point de cet arc est, par construction, exactement sur la paroi du
+prioritaire $j$ (à distance $r_j$ de son axe) : le piquage $i$ meurt en
+épousant le flanc de $j$, le joint est fermé, et chaque tube épouse le tube
+principal sur tout le pourtour survivant.
 
 Sur le tube principal, chaque piquage découpe sa gueule de loup isolée
 (§3.2) **translatée** de $(R_1\psi_i,\ z_i)$ dans le plan déroulé : la
@@ -354,11 +358,11 @@ se chevauchent, la découpe résultante est l'union des deux contours ; le
 moteur le signale.
 
 Ces énoncés sont vérifiés par les tests du moteur : un nœud à un seul
-piquage reproduit (4) à $10^{-9}$ près, la courbe d'atterrissage n'est
-jamais altérée par un voisin, et — propriété de fermeture — les contours
-de traversée portés par deux piquages qui se croisent coïncident en 3D sur
-la courbe d'intersection commune de leurs cylindres (aucun jour dans le
-joint).
+piquage reproduit (4) à $10^{-9}$ près, la courbe d'atterrissage du
+survivant n'est jamais altérée, et — propriété de fermeture — chaque point
+d'un arc de selle est à distance $r_j$ de l'axe du piquage prioritaire
+(à $10^{-9}$ près) tout en restant hors du tube principal : la couture
+repose exactement sur la paroi qui l'arrête (aucun jour dans le joint).
 
 ---
 

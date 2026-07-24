@@ -174,9 +174,14 @@
     {#if p.mode === "multi"}
       <section class="space-y-3">
         <div class="flex items-center justify-between">
-          <span class="text-[10px] uppercase tracking-[0.18em] text-ash">
-            Piquages ({p.branches.length})
-          </span>
+          <div class="flex flex-col">
+            <span class="text-[10px] uppercase tracking-[0.18em] text-ash">
+              Piquages ({p.branches.length})
+            </span>
+            <span class="text-[10px] text-ash/70">
+              l'ordre donne la priorité : un piquage meurt sur ceux au-dessus
+            </span>
+          </div>
           <button
             class="text-[11px] text-ember hover:text-ember-soft transition-colors font-medium disabled:opacity-40"
             disabled={p.branches.length >= 8}
