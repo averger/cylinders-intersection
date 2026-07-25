@@ -68,13 +68,14 @@
 
     <section class="space-y-5">
       <Slider
-        label="Diamètre Ø₁ (cylindre principal)"
+        label="Ø₁ extérieur (tube principal)"
         unit="mm"
         min={5}
         max={500}
         step={0.5}
         value={p.d1}
         decimals={2}
+        hint="cote extérieure du tube : le gabarit s'enroule à l'extérieur"
         onchange={(v) => {
           // Un piquage plus gros que le tube principal traverse de part en
           // part : hors du domaine gueule de loup — on borne Ø₂ à Ø₁.
@@ -89,7 +90,7 @@
       />
       {#if p.mode === "cyl_cyl"}
         <Slider
-          label="Diamètre Ø₂ (cylindre incliné)"
+          label="Ø₂ extérieur (tube incliné)"
           unit="mm"
           min={5}
           max={p.d1}
@@ -209,7 +210,7 @@
               {/if}
             </div>
             <Slider
-              label="Diamètre Ø"
+              label="Ø extérieur"
               unit="mm"
               min={5}
               max={p.d1}

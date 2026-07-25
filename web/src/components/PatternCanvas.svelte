@@ -306,7 +306,7 @@
       <span class="pill shrink-0" style="border-color: color-mix(in srgb, {accent} 40%, transparent); color: {accent}">{title}</span>
       {#if points.length > 0}
         <span class="num text-[10px] text-ash truncate">
-          Ø {diameter.toFixed(1)} mm · largeur {box ? box.w.toFixed(1) : "—"} mm · hauteur {box
+          Ø ext. {diameter.toFixed(1)} mm · largeur {box ? box.w.toFixed(1) : "—"} mm · hauteur {box
             ? box.h.toFixed(1)
             : "—"} mm
         </span>

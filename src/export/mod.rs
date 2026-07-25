@@ -342,7 +342,7 @@ fn build_multi_sheets(doc: &ExportDocument, input: &MultiInput) -> Result<Vec<Sh
         kind: PatternKind::Main,
         name: "Tube principal — lumières de piquages".to_string(),
         meta: format!(
-            "Ø {:.1} mm — {} lumière(s) — périmètre {:.1} mm",
+            "Ø ext. {:.1} mm — {} lumière(s) — périmètre {:.1} mm",
             payload.r1 * 2.0,
             payload.holes.len(),
             circ
@@ -385,7 +385,7 @@ fn build_multi_sheets(doc: &ExportDocument, input: &MultiInput) -> Result<Vec<Sh
         let circb = br.circumference;
         let fstart = ((u0 + u1) / 2.0 / circb).floor() * circb;
         let mut meta = format!(
-            "Ø {:.1} mm — z = {:.1} mm — phi = {:.1}° — azimut {:.1}°",
+            "Ø ext. {:.1} mm — excentrement z = {:.1} mm — phi = {:.1}° — azimut {:.1}°",
             br.r * 2.0,
             br.z,
             br.phi.to_degrees(),
@@ -498,7 +498,7 @@ fn layout_sheet(
     let meta = match kind {
         PatternKind::Branch => {
             let mut m = format!(
-                "Ø {diameter:.1} mm — périmètre {circumference:.1} mm — phi = {phi_deg:.1}°"
+                "Ø ext. {diameter:.1} mm — périmètre {circumference:.1} mm — phi = {phi_deg:.1}°"
             );
             if payload.phi_y.abs() > 1e-9 {
                 m.push_str(&format!(" — phi_y = {:.1}°", payload.phi_y.to_degrees()));
@@ -506,7 +506,7 @@ fn layout_sheet(
             m
         }
         PatternKind::Main => format!(
-            "Ø {diameter:.1} mm — lumière de piquage — phi = {phi_deg:.1}°"
+            "Ø ext. {diameter:.1} mm — lumière de piquage — phi = {phi_deg:.1}°"
         ),
     };
 

@@ -9,9 +9,23 @@
 
 ## 1. Conventions et paramétrisations
 
+### 1.0 Les rayons sont des rayons extérieurs
+
+Convention tenue dans tout le document et dans le moteur : $R_1$ et $R_2$ sont
+les rayons **extérieurs** des tubes. Ce n'est pas un choix arbitraire mais une
+conséquence de l'usage du résultat : un gabarit s'enroule **à l'extérieur** du
+tube pour y tracer la coupe. Sa largeur doit donc valoir le périmètre
+extérieur $2\pi R$, et la courbe qu'il porte est l'intersection des **surfaces
+extérieures**, la seule que l'on puisse tracer et suivre à la meuleuse.
+
+L'épaisseur de paroi n'intervient donc nulle part dans le tracé. Elle ne
+concerne que la préparation de la soudure (angle de chanfrein, variable le
+long de la couture) et la conversion du maillage en solide fermé — deux sujets
+en aval du gabarit, hors du périmètre de ce document.
+
 ### 1.1 Cylindre principal (cylindre 1)
 
-Le cylindre principal, de rayon $R_1$, a son axe porté par $Oz$ :
+Le cylindre principal, de rayon extérieur $R_1$, a son axe porté par $Oz$ :
 
 $$
 \mathcal{C}_1 : \quad x^2 + y^2 = R_1^2 .

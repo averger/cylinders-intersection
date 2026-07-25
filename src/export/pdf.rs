@@ -437,7 +437,9 @@ fn draw_title_block(
 
 fn scale_note_for(scale: f64) -> String {
     if (scale - 1.0).abs() < 1e-9 {
-        "Échelle 1:1".to_string()
+        // A template is wrapped on the OUTSIDE of the tube, which is why the
+        // diameters are outer ones and the width is the outer circumference.
+        "Échelle 1:1 — enrouler à l'extérieur du tube".to_string()
     } else if scale < 1.0 {
         format!("Échelle 1:{:.2} — aperçu, ne pas tracer", 1.0 / scale)
     } else {
@@ -567,7 +569,7 @@ fn render_tile_page(
         sheet,
         pw,
         margin,
-        "Échelle 1:1",
+        "Échelle 1:1 — enrouler à l'extérieur du tube",
         &format!("Tuile {label}"),
         idx,
         count,

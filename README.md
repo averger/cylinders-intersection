@@ -32,6 +32,13 @@ Captures Full HD (1920×1080), prêtes pour les réseaux sociaux — dossier
 | ![Vue 3D — piquage arrêté à l'intersection (thème clair)](docs/screenshots/01-cylix-3d.png) | ![Vue 3D — coupe en sifflet tronquée au plan](docs/screenshots/02-cylix-3d-plan.png) |
 | ![Éditeur 2D — les deux mises à plat](docs/screenshots/03-cylix-2d.png) | ![Thème sombre](docs/screenshots/04-cylix-3d-dark.png) |
 
+> **Cote de référence : le Ø extérieur.** Un gabarit s'enroule à l'extérieur du
+> tube pour tracer la coupe : sa largeur est le périmètre extérieur et la courbe
+> qu'il porte est l'intersection des surfaces extérieures. Tous les diamètres
+> saisis et affichés sont donc des diamètres extérieurs, et l'épaisseur de paroi
+> n'entre pas dans le tracé (elle ne concerne que le chanfrein de soudure et la
+> conversion du maillage en solide).
+
 ## 1) Théorie (version courte mais complète)
 
 ### Modèle géométrique
