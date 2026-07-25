@@ -20,28 +20,42 @@
   // --- 3D layer visibility -------------------------------------------------
   // Every object added to the scene is tagged with a layer kind; toggling a
   // layer flips `visible` flags — no geometry rebuild involved.
-  type LayerKind = "main" | "cut" | "curve";
+  type LayerKind = "main" | "cut" | "curve" | "angle" | "axis";
   function tag<T extends THREE.Object3D>(obj: T, kind: LayerKind): T {
     obj.userData.kind = kind;
     return obj;
   }
-  function applyVisibility() {
+  /** Is this layer kind currently shown? */
+  function layerOn(k: LayerKind | undefined): boolean {
     const s = store.show3d;
-    for (const child of solidsGroup?.children ?? []) {
-      const k = child.userData.kind as LayerKind | undefined;
-      child.visible =
-        k === "main" ? s.main : k === "cut" ? s.cutters : k === "curve" ? s.curves : true;
+    switch (k) {
+      case "main": return s.main;
+      case "cut": return s.cutters;
+      case "curve": return s.curves;
+      case "angle": return s.angles;
+      case "axis": return s.axes;
+      default: return true;
     }
-    if (annotGroup) annotGroup.visible = s.axes;
-    if (grid) grid.visible = s.grid;
-    if (labelsEl) labelsEl.style.display = s.labels ? "" : "none";
-    if (leadersEl) leadersEl.style.display = s.labels ? "" : "none";
+  }
+  function applyVisibility() {
+    for (const child of solidsGroup?.children ?? []) {
+      child.visible = layerOn(child.userData.kind as LayerKind | undefined);
+    }
+    // Angle protractors live alongside the axis/diameter lines but toggle
+    // on their own — the angles are THE parameters of the study.
+    for (const child of annotGroup?.children ?? []) {
+      child.visible = layerOn(child.userData.kind as LayerKind | undefined);
+    }
+    if (annotGroup) annotGroup.visible = store.show3d.angles || store.show3d.axes;
+    if (grid) grid.visible = store.show3d.grid;
   }
 
   // Projected HTML labels (Ø₁, Ø₂, φ…) — DOM managed imperatively for speed.
   interface Anchor {
     text: string;
     pos: THREE.Vector3;
+    /** Layer this chip belongs to ("angle" chips follow the angle layer). */
+    kind?: LayerKind;
     /** CSS color expression (var(--…) allowed — labels are DOM). */
     color: string;
     /** Chip offset from the projected anchor, px (leader line drawn between). */
@@ -474,6 +488,42 @@
     camera.lookAt(target);
   }
 
+  /**
+   * Exact camera distance to fit `box` for the CURRENT view direction: the
+   * eight corners are projected on the camera basis and each one bounds the
+   * distance through the horizontal and vertical fov.  Tight yet never
+   * cropped, whatever the configuration (a 20° branch is very tall, a 170°
+   * one very wide) — the angle cotes always stay readable in frame.
+   */
+  function distanceToFit(box: THREE.Box3, margin = 1.06): number {
+    const fovY = ((camera?.fov ?? 38) * Math.PI) / 180;
+    const aspect = camera?.aspect && camera.aspect > 0 ? camera.aspect : 1;
+    const tanY = Math.tan(fovY / 2);
+    const tanX = tanY * aspect;
+    // View direction target → camera, from the current orbit angles.
+    const dir = new THREE.Vector3(
+      Math.sin(phi) * Math.cos(theta),
+      Math.cos(phi),
+      Math.sin(phi) * Math.sin(theta),
+    ).normalize();
+    const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), dir);
+    if (right.lengthSq() < 1e-9) right.set(1, 0, 0);
+    right.normalize();
+    const up = new THREE.Vector3().crossVectors(dir, right).normalize();
+    const c = new THREE.Vector3();
+    let dist = 0;
+    for (let i = 0; i < 8; i++) {
+      c.set(
+        i & 1 ? box.max.x : box.min.x,
+        i & 2 ? box.max.y : box.min.y,
+        i & 4 ? box.max.z : box.min.z,
+      ).sub(target);
+      const z = c.dot(dir); // toward the camera
+      dist = Math.max(dist, z + Math.abs(c.dot(right)) / tanX, z + Math.abs(c.dot(up)) / tanY);
+    }
+    return dist * margin;
+  }
+
   function fitToScene(payload: IntersectionPayload) {
     if (payload.curve3d.length === 0 || !solidsGroup) return;
     let cx = 0, cy = 0, cz = 0;
@@ -481,12 +531,14 @@
       cx += p.x; cy += p.z; cz += -p.y;
     }
     const n = payload.curve3d.length;
-    // Aim at the joint, frame the whole assembly.
+    // Aim at the joint, frame the whole assembly INCLUDING the dimension
+    // annotations — an angle sector out of frame is a cote nobody can read.
     const box = new THREE.Box3().setFromObject(solidsGroup);
-    const size = box.getSize(new THREE.Vector3());
-    const diag = Math.max(size.length(), payload.r1 * 4);
+    if (annotGroup) box.expandByObject(annotGroup);
     target.set(cx / n, cy / n, cz / n).lerp(box.getCenter(new THREE.Vector3()), 0.45);
-    radius = Math.max(300, diag * 1.15);
+    // Frame from the target actually used, so an off-centre aim still fits.
+    const reach = new THREE.Box3().copy(box).expandByPoint(target);
+    radius = Math.max(payload.r1 * 3, distanceToFit(reach));
     setCamera();
   }
 
@@ -542,10 +594,12 @@
     const w = renderer.domElement.clientWidth;
     const h = renderer.domElement.clientHeight;
     const v = new THREE.Vector3();
+    const placed: Anchor[] = [];
     for (const a of anchors) {
       if (!a.el) continue;
       v.copy(a.pos).project(cam);
-      const visible = v.z < 1 && Math.abs(v.x) < 1.2 && Math.abs(v.y) < 1.2;
+      const layer = a.kind === "angle" ? store.show3d.angles : store.show3d.labels;
+      const visible = layer && v.z < 1 && Math.abs(v.x) < 1.2 && Math.abs(v.y) < 1.2;
       const disp = visible ? "block" : "none";
       a.el.style.display = disp;
       a.leader?.setAttribute("visibility", visible ? "visible" : "hidden");
@@ -563,6 +617,31 @@
       a.leader?.setAttribute("y2", String(cy + 12));
       a.dot?.setAttribute("cx", String(px));
       a.dot?.setAttribute("cy", String(py));
+      placed.push(a);
+    }
+
+    // Chips must never cover one another: nudge collisions vertically,
+    // angle cotes keeping their spot (they are the parameters of the study).
+    placed.sort((p, q) => (q.kind === "angle" ? 1 : 0) - (p.kind === "angle" ? 1 : 0));
+    const boxes: { x: number; y: number; w: number; h: number }[] = [];
+    for (const a of placed) {
+      if (!a.el) continue;
+      let x = parseFloat(a.el.style.left);
+      let y = parseFloat(a.el.style.top);
+      const w = a.el.offsetWidth || 90;
+      const hh = a.el.offsetHeight || 22;
+      for (let guard = 0; guard < 24; guard++) {
+        const hit = boxes.find(
+          (b) => Math.abs(b.x - x) < (b.w + w) / 2 + 4 && Math.abs(b.y - y) < (b.h + hh) / 2 + 3,
+        );
+        if (!hit) break;
+        // Step away from the chip we collide with, keeping the leader short.
+        y += hit.y >= y ? -(hh + 5) : hh + 5;
+      }
+      boxes.push({ x, y, w, h: hh });
+      a.el.style.top = `${y}px`;
+      a.leader?.setAttribute("x2", String(x));
+      a.leader?.setAttribute("y2", String(y + hh / 2));
     }
   }
 
@@ -618,19 +697,17 @@
         holder.rotation.x = phiAngle;
         solidsGroup.add(tag(holder, "cut"));
 
-        annotGroup.add(
-          axisLine(
+        annotGroup.add(tag(axisLine(
             new THREE.Vector3(0, 1, 0)
               .applyEuler(new THREE.Euler(phiAngle, 0, 0))
               .multiplyScalar(tEnd * 1.12),
             new THREE.Vector3(0, 0, 0),
             pal.axisBranch,
-          ),
-        );
+          ), "axis"));
         // Diameter line across the far rim of the branch.
         const rimA = new THREE.Vector3(-r2, tEnd, 0).applyEuler(new THREE.Euler(phiAngle, 0, 0));
         const rimB = new THREE.Vector3(r2, tEnd, 0).applyEuler(new THREE.Euler(phiAngle, 0, 0));
-        annotGroup.add(axisLine(rimA, rimB, pal.axisBranch));
+        annotGroup.add(tag(axisLine(rimA, rimB, pal.axisBranch), "axis"));
         anchors.push({
           text: `Ø₂ ${(r2 * 2).toFixed(1)} mm`,
           pos: new THREE.Vector3(0, tEnd, 0).applyEuler(new THREE.Euler(phiAngle, 0, 0)),
@@ -640,17 +717,13 @@
       }
 
       const axisLen = heightMain * 0.62;
-      annotGroup.add(
-        axisLine(new THREE.Vector3(0, -axisLen, 0), new THREE.Vector3(0, axisLen, 0), pal.axisMain),
-      );
+      annotGroup.add(tag(axisLine(new THREE.Vector3(0, -axisLen, 0), new THREE.Vector3(0, axisLen, 0), pal.axisMain), "axis"));
       // Diameter line across the bottom rim, label leadered to its middle.
-      annotGroup.add(
-        axisLine(
+      annotGroup.add(tag(axisLine(
           new THREE.Vector3(-r1, -heightMain / 2, 0),
           new THREE.Vector3(r1, -heightMain / 2, 0),
           pal.axisMain,
-        ),
-      );
+        ), "axis"));
       anchors.push({
         text: `Ø₁ ${(r1 * 2).toFixed(1)} mm`,
         pos: new THREE.Vector3(0, -heightMain / 2, 0),
@@ -751,9 +824,7 @@
         });
       }
       const axisLen = Math.abs(bottomZ) + r1 * 2;
-      annotGroup.add(
-        axisLine(new THREE.Vector3(0, bottomZ, 0), new THREE.Vector3(0, axisLen * 0.4, 0), pal.axisMain),
-      );
+      annotGroup.add(tag(axisLine(new THREE.Vector3(0, bottomZ, 0), new THREE.Vector3(0, axisLen * 0.4, 0), pal.axisMain), "axis"));
       anchors.push({
         text: `Ø₁ ${(r1 * 2).toFixed(1)} mm`,
         pos: new THREE.Vector3(r1 * 0.55, bottomZ * 0.55, r1 * 0.7),
@@ -766,19 +837,18 @@
     if (Math.abs(phiAngle) > 1e-3 && payload.mode === "cyl_cyl") {
       const rArc = Math.max(r1 * 1.95, (payload.r2 ?? 0) * 1.95, 60);
       const emberCol = palette().curve;
-      annotGroup.add(
-        angleSector(
+      annotGroup.add(tag(angleSector(
           new THREE.Vector3(0, 0, 0),
           (sA) => new THREE.Vector3(0, Math.cos(sA), Math.sin(sA)),
           phiAngle,
           rArc * 0.55,
           rArc,
           emberCol,
-        ),
-      );
+        ), "angle"));
       const midA = phiAngle / 2;
       anchors.push({
         text: `φ = ${((phiAngle * 180) / Math.PI).toFixed(1)}°`,
+          kind: "angle",
         pos: new THREE.Vector3(0, Math.cos(midA) * rArc * 0.78, Math.sin(midA) * rArc * 0.78),
         color: "var(--ember)",
         dy: 0,
@@ -793,19 +863,18 @@
       // Tilt around X — sector in the x = 0 plane.
       if (Math.abs(phiAngle) > 1e-3) {
         const sgn = Math.sign(phiAngle);
-        annotGroup.add(
-          angleSector(
+        annotGroup.add(tag(angleSector(
             origin,
             (sA) => new THREE.Vector3(0, -Math.sin(sA) * sgn, -Math.cos(sA)),
             Math.abs(phiAngle),
             rArc * 0.55,
             rArc,
             emberCol,
-          ),
-        );
+          ), "angle"));
         const midA = Math.abs(phiAngle) / 2;
         anchors.push({
           text: `${both ? "φx" : "φ"} = ${((phiAngle * 180) / Math.PI).toFixed(1)}°`,
+          kind: "angle",
           pos: origin
             .clone()
             .add(
@@ -819,19 +888,18 @@
       // Tilt around Y — sector in the y_math = 0 plane (three x-y plane).
       if (Math.abs(phiY) > 1e-3) {
         const sgnY = Math.sign(phiY);
-        annotGroup.add(
-          angleSector(
+        annotGroup.add(tag(angleSector(
             origin,
             (sA) => new THREE.Vector3(Math.cos(sA), -Math.sin(sA) * sgnY, 0),
             Math.abs(phiY),
             rArc * 0.55,
             rArc,
             palette().axisMain,
-          ),
-        );
+          ), "angle"));
         const midA = Math.abs(phiY) / 2;
         anchors.push({
           text: `φy = ${(phiY * 180 / Math.PI).toFixed(1)}°`,
+          kind: "angle",
           pos: origin
             .clone()
             .add(new THREE.Vector3(Math.cos(midA), -Math.sin(midA) * sgnY, 0).multiplyScalar(rArc * 0.78)),
@@ -1192,9 +1260,7 @@
       rg.position.y = zEnd;
       solidsGroup.add(tag(rg, "main"));
     }
-    annotGroup.add(
-      axisLine(new THREE.Vector3(0, zLo - 20, 0), new THREE.Vector3(0, zHi + 20, 0), pal.axisMain),
-    );
+    annotGroup.add(tag(axisLine(new THREE.Vector3(0, zLo - 20, 0), new THREE.Vector3(0, zHi + 20, 0), pal.axisMain), "axis"));
     anchors.push({
       text: `Ø₁ ${(r1 * 2).toFixed(1)} mm`,
       pos: new THREE.Vector3(0, zLo, 0),
@@ -1269,23 +1335,25 @@
       // radii so several branches stay readable side by side.
       {
         const origin = new THREE.Vector3(0, b.z, 0);
-        const rArc = Math.max(r1 * 1.8, 64) * (1 + 0.24 * i);
+        const rArc = Math.max(r1 * 1.35, 52) * (1 + 0.17 * i);
         const sinP = Math.sin(b.psi), cosP = Math.cos(b.psi);
         // φ: sweep from the main axis (+Z math) to the branch axis, in
         // their common plane — math dir(s) = cos s·e_z + sin s·(sinψ, −cosψ, 0).
-        annotGroup!.add(
-          angleSector(
+        annotGroup!.add(tag(angleSector(
             origin,
             (s) => new THREE.Vector3(sinP * Math.sin(s), Math.cos(s), cosP * Math.sin(s)),
             b.phi,
             rArc * 0.6,
             rArc,
             pal.curve,
-          ),
-        );
-        const midP = b.phi / 2;
+          ), "angle"));
+        // Stagger the chip along the arc (0.5, 0.62, 0.38, …) so branches
+        // with close angles never stack their cotes.
+        const frac = 0.5 + (i % 3 === 1 ? 0.14 : i % 3 === 2 ? -0.14 : 0);
+        const midP = b.phi * frac;
         anchors.push({
           text: `φ${i + 1} = ${((b.phi * 180) / Math.PI).toFixed(1)}°`,
+          kind: "angle",
           pos: origin
             .clone()
             .add(
@@ -1302,19 +1370,18 @@
         // reference — math dir(s) = (sgn·sin s, −cos s, 0).
         if (Math.abs(b.psi) > 0.01) {
           const sgn = Math.sign(b.psi);
-          annotGroup!.add(
-            angleSector(
+          annotGroup!.add(tag(angleSector(
               origin,
               (s) => new THREE.Vector3(sgn * Math.sin(s), 0, Math.cos(s)),
               Math.abs(b.psi),
               rArc * 0.44,
               rArc * 0.72,
               pal.axisMain,
-            ),
-          );
+            ), "angle"));
           const midA = Math.abs(b.psi) / 2;
           anchors.push({
             text: `ψ${i + 1} = ${((b.psi * 180) / Math.PI).toFixed(0)}°`,
+          kind: "angle",
             pos: origin
               .clone()
               .add(
@@ -1327,9 +1394,7 @@
           });
         }
         // Branch axis line through the node, out to the tube end.
-        annotGroup!.add(
-          axisLine(origin, built.endCenter.clone().multiplyScalar(1.1), pal.axisBranch),
-        );
+        annotGroup!.add(tag(axisLine(origin, built.endCenter.clone().multiplyScalar(1.1), pal.axisBranch), "axis"));
       }
       // Cut rims drawn along EXACT polylines (no smoothing): the landing
       // curve on the main tube, plus each crossing contour — both lie on
@@ -1366,9 +1431,9 @@
     applyVisibility();
 
     const box = new THREE.Box3().setFromObject(solidsGroup);
-    const size = box.getSize(new THREE.Vector3());
+    box.expandByObject(annotGroup); // keep every angle cote in frame
     target.copy(box.getCenter(new THREE.Vector3()));
-    radius = Math.max(300, size.length() * 1.05);
+    radius = Math.max(r1 * 3, distanceToFit(box));
     setCamera();
   }
 
@@ -1607,8 +1672,9 @@
               : "tube incliné",
       },
       { key: "curves", label: "courbes de coupe" },
-      { key: "labels", label: "étiquettes" },
-      { key: "axes", label: "axes · cotes" },
+      { key: "angles", label: "angles φ · ψ" },
+      { key: "labels", label: "étiquettes Ø" },
+      { key: "axes", label: "axes · cotes Ø" },
       { key: "grid", label: "grille" },
     ] as { key: keyof Show3D; label: string }[],
   );

@@ -114,13 +114,22 @@ export interface Show3D {
   main: boolean;     // main tube (wall, end rings)
   cutters: boolean;  // inclined tube(s) / plane
   curves: boolean;   // cut rims and opening contours
-  labels: boolean;   // Ø / φ chips with leader lines
-  axes: boolean;     // axis lines and angle arcs
+  angles: boolean;   // angle protractors (φ, ψ) with their chips
+  labels: boolean;   // Ø chips with leader lines
+  axes: boolean;     // axis lines and diameter lines
   grid: boolean;     // ground grid
 }
 
 export function defaultShow3D(): Show3D {
-  return { main: true, cutters: true, curves: true, labels: true, axes: true, grid: true };
+  return {
+    main: true,
+    cutters: true,
+    curves: true,
+    angles: true,
+    labels: true,
+    axes: true,
+    grid: true,
+  };
 }
 
 interface PersistShape {
