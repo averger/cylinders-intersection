@@ -143,9 +143,14 @@ interface **Svelte 5 + Tailwind 4** servie en SPA, vue 3D **Three.js**.
 * **Layout outil** : paramètres à gauche, viewport central, bascule **3D ↔ 2D**,
   barre de statut ; **études en onglets** (multi-études, renommage au double-clic,
   copie des paramètres courants, persistance locale) — comme dans pilegroupx.
-* **Mode Multi tube** : N tubes (Ø, inclinaison φ, azimut ψ) dont les axes
-  **convergent au centre du tube principal** — un vrai nœud de treillis,
-  comme dans les autres modes. **Tous les tubes s'arrêtent au nœud** :
+* **Mode Multi tube** : N tubes (Ø, excentrement z, inclinaison φ, azimut ψ)
+  dont les axes **convergent au centre du tube principal** par défaut, comme
+  dans les autres modes. Le curseur d'excentrement décale le point de percée
+  le long de la membrure : l'app affiche alors, pour chaque paire coplanaire,
+  les trois cotes que contrôle un bureau d'études — **excentrement e**
+  (formule close, facteur de l'EN 1993-1-8), **jeu g** ou **taux de
+  recouvrement λov**, avec alerte au-delà de 0,25·Ø₁ et sous 25 % de
+  recouvrement. **Tous les tubes s'arrêtent au nœud** :
   l'ordre de la liste donne la priorité (piquage 1 = membre traversant), et
   la lèvre de chaque piquage est **une seule courbe continue** — sinusoïde
   d'atterrissage là où il touche le tube principal, **selle** là où il

@@ -19,10 +19,12 @@ export type View = "3d" | "2d";
 export type Theme = "light" | "dark";
 
 /** One branch of a multi-branch node, in UI units (mm / degrees).
- * Every branch axis passes through the CENTRE of the main tube — the axes
- * are concurrent, like in the two-cylinder mode: a true truss node. */
+ * `z = 0` (the default) puts the axis through the CENTRE of the main tube:
+ * concurrent axes, like in the two-cylinder mode.  A non-zero `z` slides the
+ * axis along the chord and creates the ECCENTRICITY of a real K / N joint. */
 export interface BranchParam {
   d: number;          // branch diameter, mm
+  z: number;          // axis crossing point along the chord axis, mm
   angleDeg: number;   // inclination from the main axis, (0°, 180°)
   azimutDeg: number;  // azimuth around the main tube, degrees
 }
@@ -61,9 +63,9 @@ export interface Study {
  * priority: 2 dies on 1, 3 dies on 1 and 2. */
 export function defaultBranches(): BranchParam[] {
   return [
-    { d: 60, angleDeg: 45, azimutDeg: 0 },
-    { d: 50, angleDeg: 90, azimutDeg: 0 },
-    { d: 45, angleDeg: 135, azimutDeg: 0 },
+    { d: 60, z: 0, angleDeg: 45, azimutDeg: 0 },
+    { d: 50, z: 0, angleDeg: 90, azimutDeg: 0 },
+    { d: 45, z: 0, angleDeg: 135, azimutDeg: 0 },
   ];
 }
 
@@ -154,7 +156,11 @@ function load(): PersistShape | null {
       if (!Array.isArray(params.branches) || params.branches.length === 0) {
         params.branches = defaultBranches();
       }
-      params.branches = params.branches.map((b) => ({ ...b, d: Math.min(b.d, params.d1) }));
+      params.branches = params.branches.map((b) => ({
+        ...b,
+        d: Math.min(b.d, params.d1),
+        z: b.z ?? 0, // studies saved before the eccentricity slider
+      }));
       return {
         id: s.id ?? newId(),
         name: s.name ?? "Étude",
@@ -310,7 +316,7 @@ class AppStore {
           r1: p.d1 / 2,
           branches: p.branches.map((b) => ({
             r: b.d / 2,
-            z: 0,
+            z: b.z ?? 0,
             phi: (b.angleDeg * Math.PI) / 180,
             psi: (b.azimutDeg * Math.PI) / 180,
           })),

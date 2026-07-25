@@ -26,7 +26,7 @@
     // Axes are concurrent: an exact clone would die entirely on its twin —
     // tilt the newcomer so it lands somewhere of its own.
     const angleDeg = last.angleDeg + 30 <= 175 ? last.angleDeg + 30 : last.angleDeg - 30;
-    const branches = [...store.params.branches, { ...last, angleDeg }];
+    const branches = [...store.params.branches, { ...last, angleDeg, z: last.z }];
     store.params = { ...store.params, branches };
     store.compute();
   }
@@ -182,8 +182,7 @@
               Piquages ({p.branches.length})
             </span>
             <span class="text-[10px] text-ash/70">
-              axes concourants au centre du tube · l'ordre donne la priorité :
-              un piquage meurt sur ceux au-dessus
+              l'ordre donne la priorité : un piquage meurt sur ceux au-dessus
             </span>
           </div>
           <button
@@ -220,6 +219,17 @@
               onchange={(v) => patchBranch(i, { d: v })}
             />
             <Slider
+              label="Excentrement z"
+              unit="mm"
+              min={-200}
+              max={200}
+              step={1}
+              value={b.z}
+              decimals={0}
+              hint="0 = axe au centre du tube · décale le point de croisement"
+              onchange={(v) => patchBranch(i, { z: v })}
+            />
+            <Slider
               label="Inclinaison φ"
               unit="°"
               min={5}
@@ -243,6 +253,44 @@
             />
           </div>
         {/each}
+
+        {#if store.multiResult && store.multiResult.pairs.length > 0}
+          <div class="rounded-xl border border-mist bg-carbon/30 p-3 space-y-2">
+            <div class="flex flex-col">
+              <span class="text-[10px] uppercase tracking-[0.18em] text-ash">Nœud</span>
+              <span class="text-[10px] text-ash/70">
+                excentrement, jeu ou recouvrement — les cotes du bureau d'études
+              </span>
+            </div>
+            {#each store.multiResult.pairs as pr (`${pr.i}-${pr.j}`)}
+              <div class="space-y-1 text-[11px]">
+                <div class="flex justify-between">
+                  <span class="text-ash"
+                    >P{pr.i + 1} · P{pr.j + 1}
+                    <span class="text-ash/60">{pr.same_side ? "même côté" : "opposés"}</span></span
+                  >
+                  <span class="num text-silver">
+                    e = {pr.eccentricity === null ? "—" : pr.eccentricity.toFixed(1)} mm
+                  </span>
+                </div>
+                {#if pr.overlap_pct !== null}
+                  <div class="flex justify-between">
+                    <span class="text-ash">recouvrement λov</span>
+                    <span
+                      class="num {pr.overlap_pct < 25 ? 'text-ember' : 'text-silver'}"
+                      >{pr.overlap_pct.toFixed(0)} %</span
+                    >
+                  </div>
+                {:else if pr.gap !== null}
+                  <div class="flex justify-between">
+                    <span class="text-ash">jeu g</span>
+                    <span class="num text-silver">{pr.gap.toFixed(1)} mm</span>
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
 
         {#if store.multiResult && store.multiResult.warnings.length > 0}
           <div class="space-y-1.5">

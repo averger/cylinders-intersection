@@ -326,9 +326,10 @@ $\varphi_i \in (0, \pi)$ et son **azimut** $\psi_i$ autour du tube. L'axe du
 piquage $i$ passe par $C_i = (0, 0, z_i)$ avec la direction
 $d_i = R_z(\psi_i)\,R_x(\varphi_i)\,e_z$, et sa génératrice d'angle $\theta$
 est la droite $P(t) = C_i + r_i(\cos\theta\,u_i + \sin\theta\,w_i) + t\,d_i$.
-L'application fixe $z_i = 0$ : **tous les axes concourent au centre du tube
-principal**, comme dans les autres modes — le point de travail d'un nœud de
-treillis, sans excentrement.
+Par défaut $z_i = 0$ : **tous les axes concourent au centre du tube
+principal**, comme dans les autres modes, soit le point de travail d'un nœud
+de treillis sans excentrement. $z_i \neq 0$ décale le point de percée d'un
+piquage le long de la membrure et introduit l'**excentrement** du §4.5.
 
 Chaque piquage **s'arrête au nœud** : aucun tube ne traverse un autre.
 Comme deux cylindres qui se croisent ne peuvent pas *tous deux* s'arrêter
@@ -377,6 +378,52 @@ jamais altérée, et — propriété de fermeture — chaque point levé de la l
 d'un chevauchant est à distance $r_j$ de l'axe d'un prioritaire (à
 $10^{-9}$ près) tout en restant hors du tube principal : la couture repose
 exactement sur la paroi qui l'arrête (aucun jour dans le joint).
+
+### 4.5 Excentrement, jeu et recouvrement du nœud
+
+Deux piquages de même azimut (ou opposés de $\pi$) sont **coplanaires** avec
+l'axe de la membrure : leurs axes se coupent réellement, en un point dont la
+distance à l'axe de la membrure est l'**excentrement** $e$ du nœud. Dans le
+plan du nœud, l'axe du piquage $i$ s'écrit
+$(a, b) = (0, z_i) + t(\sin\varphi_i, \cos\varphi_i)$, et l'élimination
+donne directement
+
+$$
+e \;=\; (z_j - z_i)\,
+\frac{\sin\varphi_i\,\sin\varphi_j}{\sin(\varphi_j - \varphi_i)},
+\tag{16}
+$$
+
+le dénominateur devenant $\sin(\varphi_i + \varphi_j)$ pour deux piquages
+opposés. Axes concourants ($z_i = z_j$) donne $e = 0$ ; axes parallèles
+($\varphi_i = \varphi_j$) annule le dénominateur, les axes ne se coupant
+jamais. Le facteur
+$\sin\varphi_i\sin\varphi_j / \sin(\varphi_i + \varphi_j)$ est celui de
+la formule d'excentrement des nœuds K de l'**EN 1993-1-8** : en prenant
+$\varphi_i = \theta_1$ pour la barre montante et
+$\varphi_j = \pi - \theta_2$ pour la descendante,
+$\sin(\varphi_j - \varphi_i) = \sin(\theta_1 + \theta_2)$.
+
+Le **jeu** $g$ et le **taux de recouvrement** $\lambda_{ov}$ se lisent sur la
+génératrice du plan du nœud, d'abscisse $u = R_1(\psi - \pi/2)$ dans le
+développé — le sommet de la lumière, puisque le piquage penche selon
+$n(\psi) = (\sin\psi, -\cos\psi, 0)$, d'azimut $\psi - \pi/2$. Chaque
+empreinte y découpe un segment $[v_{\min}, v_{\max}]$ ; si les deux segments
+sont disjoints, leur écart est le jeu, mesuré le long de la surface (le
+développé étant une isométrie, cette distance est la vraie distance sur le
+tube). S'ils se chevauchent, $\lambda_{ov} = q/p$ où $q$ est le
+recouvrement et $p$ l'étendue de l'empreinte du piquage **chevauchant** prise
+seule, conformément à la définition de la norme.
+
+Une conséquence utile en atelier : un piquage perce la paroi là où son propre
+axe la traverse, à la distance $R_1/\sin\varphi$ du centre le long de son
+axe. Deux piquages **concourants** de sens opposés laissent donc
+nécessairement un jeu entre leurs lumières ; le rapprocher d'un recouvrement
+donné passe obligatoirement par un excentrement, ce que (16) chiffre
+directement.
+
+Le moteur signale les deux dépassements normatifs : $|e| > 0{,}25\,\varnothing_1$
+et $\lambda_{ov} < 25\,\%$.
 
 ---
 

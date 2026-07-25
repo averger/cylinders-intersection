@@ -598,7 +598,12 @@
     for (const a of anchors) {
       if (!a.el) continue;
       v.copy(a.pos).project(cam);
-      const layer = a.kind === "angle" ? store.show3d.angles : store.show3d.labels;
+      const layer =
+        a.kind === "angle"
+          ? store.show3d.angles
+          : a.kind === "axis"
+            ? store.show3d.axes
+            : store.show3d.labels;
       const visible = layer && v.z < 1 && Math.abs(v.x) < 1.2 && Math.abs(v.y) < 1.2;
       const disp = visible ? "block" : "none";
       a.el.style.display = disp;
@@ -1424,6 +1429,42 @@
       }
       for (const hr of built.holeRims) rimTube(hr.pts, hr.closed);
     });
+
+    // Eccentricity of each coplanar pair: mark WHERE the brace axes really
+    // cross and cote its distance to the chord axis.  Same closed form as the
+    // engine, so the 3D and the panel can never disagree.
+    for (const pr of m.pairs ?? []) {
+      const e = pr.eccentricity;
+      if (e === null || Math.abs(e) < 0.05) continue; // concurrent: nothing to show
+      const a = m.branches[pr.i];
+      const b2 = m.branches[pr.j];
+      if (!a || !b2) continue;
+      const den = pr.same_side ? Math.sin(b2.phi - a.phi) : Math.sin(a.phi + b2.phi);
+      if (Math.abs(den) < 1e-9) continue;
+      const t = ((b2.z - a.z) * Math.sin(b2.phi)) / den;
+      // Math coords: C_a + t·d_a, then map to three (x, z, −y).
+      const da = new THREE.Vector3(
+        Math.sin(a.phi) * Math.sin(a.psi),
+        -Math.sin(a.phi) * Math.cos(a.psi),
+        Math.cos(a.phi),
+      );
+      const cross = m2t(t * da.x, t * da.y, a.z + t * da.z);
+      const onAxis = new THREE.Vector3(0, cross.y, 0);
+      annotGroup.add(tag(axisLine(onAxis, cross, pal.axisMain), "axis"));
+      const dot = new THREE.Mesh(
+        new THREE.SphereGeometry(Math.max(1.2, r1 * 0.022), 12, 8),
+        new THREE.MeshBasicMaterial({ color: pal.curve }),
+      );
+      dot.position.copy(cross);
+      annotGroup.add(tag(dot, "axis"));
+      anchors.push({
+        text: `e${pr.i + 1}${pr.j + 1} = ${e.toFixed(1)} mm`,
+        pos: cross.clone().lerp(onAxis, 0.5),
+        color: "var(--cyan)",
+        kind: "axis",
+        dy: 26,
+      });
+    }
 
     scene.add(solidsGroup);
     scene.add(annotGroup);

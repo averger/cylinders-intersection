@@ -88,12 +88,26 @@ export interface HoleResult {
   bbox: BBox2 | null;
 }
 
+/** Joint metrics of a coplanar pair of branches (EN 1993-1-8 quantities). */
+export interface NodePair {
+  i: number;
+  j: number;
+  same_side: boolean;
+  /** Distance from the chord axis to the brace-axes crossing point, mm. */
+  eccentricity: number | null;
+  /** Gap between the footprints in the joint plane, mm (null if overlapping). */
+  gap: number | null;
+  /** Overlap ratio λov, % (null when there is a gap). */
+  overlap_pct: number | null;
+}
+
 export interface MultiPayload {
   mode: "multi";
   r1: number;
   circumference_main: number;
   branches: MultiBranchResult[];
   holes: HoleResult[];
+  pairs: NodePair[];
   warnings: string[];
 }
 

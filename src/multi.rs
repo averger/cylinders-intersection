@@ -98,6 +98,30 @@ pub struct HoleResult {
     pub bbox: Option<BBox2>,
 }
 
+/// Fabrication metrics of a **coplanar pair** of branches (K / N / X joint):
+/// where their axes really cross, and how their footprints sit relative to
+/// each other on the chord.  These are the numbers a design office checks
+/// (EN 1993-1-8): eccentricity, gap, overlap ratio.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct NodePair {
+    pub i: usize,
+    pub j: usize,
+    /// `true` when both branches leave on the same side of the chord (K / N
+    /// joint); `false` when they are opposed through it (X joint).
+    pub same_side: bool,
+    /// Signed distance from the chord axis to the point where the two brace
+    /// axes cross, mm.  `0` = concurrent axes (no eccentricity); positive on
+    /// the side the branches come from.  `None` when the axes are parallel.
+    pub eccentricity: Option<f64>,
+    /// Gap between the two footprints, measured along the generatrix of the
+    /// joint plane (mm).  `None` when they overlap or are opposed.
+    pub gap: Option<f64>,
+    /// Overlap ratio λov = q/p, %, measured in the joint plane on the
+    /// footprint of the overlapping (lower-priority) branch taken alone.
+    /// `None` when there is a gap.
+    pub overlap_pct: Option<f64>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct MultiPayload {
     pub mode: &'static str,
@@ -106,6 +130,8 @@ pub struct MultiPayload {
     pub branches: Vec<MultiBranchResult>,
     /// All openings of the main tube, positioned in its unrolled plane.
     pub holes: Vec<HoleResult>,
+    /// Joint metrics of every coplanar pair of branches.
+    pub pairs: Vec<NodePair>,
     pub warnings: Vec<String>,
 }
 
@@ -319,9 +345,13 @@ pub fn multi(input: &MultiInput) -> MultiPayload {
         }
     }
 
+    // Joint metrics are read on the ISOLATED footprints (λov is defined
+    // "in the absence of the overlapped brace"), so before merging.
+    let circ = std::f64::consts::TAU * r1;
+    let pairs = node_pairs(input, &holes, r1, circ);
+
     // Overlapping openings are merged into their envelope: the template of
     // the main tube must only ever show the actual cut contour.
-    let circ = std::f64::consts::TAU * r1;
     let (holes, merged) = merge_overlapping_holes(holes, circ);
 
     // Warnings: mutual seams and merged openings.
@@ -341,14 +371,133 @@ pub fn multi(input: &MultiInput) -> MultiPayload {
         ));
     }
 
+    // Design checks on the joints.
+    let d0 = 2.0 * r1;
+    for p in &pairs {
+        if let Some(e) = p.eccentricity {
+            if e.abs() > 0.25 * d0 {
+                warnings.push(format!(
+                    "Piquages {} et {} : excentrement e = {:.1} mm, au-delà de 0,25·Ø₁ ({:.1} mm) — hors du domaine courant de l'EN 1993-1-8, le moment secondaire doit être repris par le calcul.",
+                    p.i + 1,
+                    p.j + 1,
+                    e,
+                    0.25 * d0
+                ));
+            }
+        }
+        if let Some(ov) = p.overlap_pct {
+            if ov < 25.0 {
+                warnings.push(format!(
+                    "Piquages {} et {} : recouvrement λov = {:.0} %, sous le minimum de 25 % (EN 1993-1-8) — soit augmenter le recouvrement, soit passer à un nœud avec jeu.",
+                    p.i + 1,
+                    p.j + 1,
+                    ov
+                ));
+            }
+        }
+    }
+
     MultiPayload {
         mode: "multi",
         r1,
         circumference_main: circ,
         branches,
         holes,
+        pairs,
         warnings,
     }
+}
+
+/// Axial extent `[v_min, v_max]` of a closed developed loop on the generatrix
+/// of abscissa `u0` (periodic, `circ`).  `None` when the loop misses it.
+fn span_at_u(pts: &[DevPoint], u0: f64, circ: f64) -> Option<(f64, f64)> {
+    for k in -2i32..=2 {
+        let u = u0 + f64::from(k) * circ;
+        let mut vs: Vec<f64> = Vec::new();
+        let m = pts.len();
+        for idx in 0..m {
+            let a = &pts[idx];
+            let b = &pts[(idx + 1) % m];
+            // Half-open rule: a vertex sitting exactly ON the generatrix
+            // (θ = 0 does) is counted once, never twice, never zero times.
+            if (a.u <= u) != (b.u <= u) {
+                let s = (u - a.u) / (b.u - a.u);
+                vs.push(a.v + s * (b.v - a.v));
+            }
+        }
+        if vs.len() >= 2 {
+            return Some((
+                vs.iter().cloned().fold(f64::INFINITY, f64::min),
+                vs.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+            ));
+        }
+    }
+    None
+}
+
+/// Joint metrics of every coplanar pair of branches.
+///
+/// Two branches sharing an azimuth (or opposed by π) lie in one plane with
+/// the chord axis: their axes then really cross, at a distance from the
+/// chord axis that closed form gives as
+/// `e = (z_j − z_i)·sinφ_i·sinφ_j / sin(φ_j − φ_i)` on the same side, the
+/// denominator becoming `sin(φ_i + φ_j)` when the branches are opposed: this
+/// is the eccentricity of the node, zero when they are concurrent.
+///
+/// Non-coplanar (spatial) pairs are skipped, the plane framework of the
+/// standard defining no gap for them.
+fn node_pairs(input: &MultiInput, holes: &[HoleResult], r1: f64, circ: f64) -> Vec<NodePair> {
+    let tau = std::f64::consts::TAU;
+    let mut out = Vec::new();
+    let n = input.branches.len();
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let (a, b) = (&input.branches[i], &input.branches[j]);
+            let dpsi = (b.psi - a.psi).rem_euclid(tau);
+            let same_side = dpsi < 1e-6 || (tau - dpsi) < 1e-6;
+            let opposed = (dpsi - std::f64::consts::PI).abs() < 1e-6;
+            if !same_side && !opposed {
+                continue; // spatial joint: no plane definition of the gap
+            }
+            let denom = if same_side { (b.phi - a.phi).sin() } else { (a.phi + b.phi).sin() };
+            let eccentricity = if denom.abs() < 1e-9 {
+                None // parallel axes: they never cross
+            } else {
+                Some((b.z - a.z) * a.phi.sin() * b.phi.sin() / denom)
+            };
+
+            // Gap / overlap along the generatrix of the joint plane.  Only
+            // meaningful on the same side: opposed branches land on opposite
+            // faces of the chord and can never touch.
+            let (mut gap, mut overlap_pct) = (None, None);
+            if same_side {
+                // Crown generatrix of the joint plane: the branch leans along
+                // n(ψ) = (sinψ, −cosψ, 0), i.e. azimuth α = ψ − π/2, so its
+                // footprint straddles u = r1·(ψ − π/2) on the development.
+                let u0 = r1 * (a.psi - std::f64::consts::FRAC_PI_2);
+                let find = |idx: usize| holes.iter().find(|h| h.branch == idx);
+                if let (Some(hi), Some(hj)) = (find(i), find(j)) {
+                    if let (Some(si), Some(sj)) =
+                        (span_at_u(&hi.pts, u0, circ), span_at_u(&hj.pts, u0, circ))
+                    {
+                        let q = si.1.min(sj.1) - si.0.max(sj.0);
+                        if q > 0.0 {
+                            // λov is read on the overlapping brace, i.e. the
+                            // lower-priority one (j), taken alone.
+                            let p = sj.1 - sj.0;
+                            if p > 1e-9 {
+                                overlap_pct = Some(100.0 * q / p);
+                            }
+                        } else {
+                            gap = Some(-q);
+                        }
+                    }
+                }
+            }
+            out.push(NodePair { i, j, same_side, eccentricity, gap, overlap_pct });
+        }
+    }
+    out
 }
 
 // ---------------------------------------------------------------------
@@ -703,6 +852,141 @@ mod tests {
             }
             assert!(lifted > 50, "P{} : trop peu de selle ({lifted})", bi + 1);
         }
+    }
+
+    /// Closest point between two axes (lines), as a mid-point of the
+    /// closest-approach segment — an INDEPENDENT check of the closed form.
+    fn axes_crossing(a: &MultiBranchSpec, b: &MultiBranchSpec) -> nalgebra::Vector3<f64> {
+        let dir = |s: &MultiBranchSpec| {
+            (crate::geometry::rot_z(s.psi) * crate::geometry::rot_x(s.phi))
+                * nalgebra::Vector3::z()
+        };
+        let (p1, d1) = (nalgebra::Vector3::new(0.0, 0.0, a.z), dir(a));
+        let (p2, d2) = (nalgebra::Vector3::new(0.0, 0.0, b.z), dir(b));
+        let r = p1 - p2;
+        let (a11, b12, c22) = (d1.dot(&d1), d1.dot(&d2), d2.dot(&d2));
+        let (d1r, d2r) = (d1.dot(&r), d2.dot(&r));
+        let den = a11 * c22 - b12 * b12;
+        let t = (b12 * d2r - c22 * d1r) / den;
+        let u = (a11 * d2r - b12 * d1r) / den;
+        ((p1 + t * d1) + (p2 + u * d2)) * 0.5
+    }
+
+    #[test]
+    fn concurrent_axes_have_no_eccentricity() {
+        // The application default: every axis through the centre, e = 0.
+        let specs = vec![
+            MultiBranchSpec { r: 30.0, z: 0.0, phi: 45f64.to_radians(), psi: 0.0 },
+            MultiBranchSpec { r: 25.0, z: 0.0, phi: 135f64.to_radians(), psi: 0.0 },
+        ];
+        let node = multi(&MultiInput { r1: 50.0, branches: specs, n_samples: 720 });
+        assert_eq!(node.pairs.len(), 1, "une paire coplanaire attendue");
+        let p = node.pairs[0];
+        assert!(p.same_side);
+        assert!(p.eccentricity.unwrap().abs() < 1e-9, "axes concourants : e = 0");
+    }
+
+    #[test]
+    fn eccentricity_matches_the_axes_crossing_point() {
+        // K joint with axial offsets: the closed form must land on the point
+        // where the two axes really cross, measured from the chord axis.
+        let specs = vec![
+            MultiBranchSpec { r: 30.0, z: -30.0, phi: 45f64.to_radians(), psi: 0.0 },
+            MultiBranchSpec { r: 25.0, z: 30.0, phi: 135f64.to_radians(), psi: 0.0 },
+        ];
+        let node = multi(&MultiInput { r1: 50.0, branches: specs.clone(), n_samples: 720 });
+        let e = node.pairs[0].eccentricity.unwrap();
+        // Closed form: (z2 − z1)·sinφ1·sinφ2 / sin(φ2 − φ1) = 60·0.5/1 = 30.
+        assert!((e - 30.0).abs() < 1e-9, "forme close inattendue : {e}");
+        // Independent: distance from the chord axis to the crossing point,
+        // signed along the outward radial direction of the joint plane.
+        let w = axes_crossing(&specs[0], &specs[1]);
+        let n = nalgebra::Vector3::new(specs[0].psi.sin(), -specs[0].psi.cos(), 0.0);
+        assert!(
+            (w - n * w.dot(&n)).norm() < 1e-9,
+            "le point de croisement doit être dans le plan du nœud"
+        );
+        assert!((w.dot(&n) - e).abs() < 1e-9, "excentrement ≠ point de croisement");
+
+        // Opposed branches (X joint) use sin(φ1 + φ2) — check the other sign.
+        let opp = vec![
+            MultiBranchSpec { r: 30.0, z: -20.0, phi: 60f64.to_radians(), psi: 0.0 },
+            MultiBranchSpec {
+                r: 25.0,
+                z: 20.0,
+                phi: 60f64.to_radians(),
+                psi: std::f64::consts::PI,
+            },
+        ];
+        let nx = multi(&MultiInput { r1: 50.0, branches: opp.clone(), n_samples: 720 });
+        let ex = nx.pairs[0].eccentricity.unwrap();
+        assert!(!nx.pairs[0].same_side, "piquages opposés");
+        let wx = axes_crossing(&opp[0], &opp[1]);
+        let nvec = nalgebra::Vector3::new(opp[0].psi.sin(), -opp[0].psi.cos(), 0.0);
+        assert!((wx.dot(&nvec) - ex).abs() < 1e-9, "excentrement X ≠ croisement");
+    }
+
+    #[test]
+    fn gap_and_overlap_are_read_in_the_joint_plane() {
+        // A brace pierces the chord wall where its own axis exits it, so with
+        // CONCURRENT axes two opposed braces necessarily land far apart: the
+        // node has a gap, and eccentricity is what closes it.  Both regimes
+        // must be measured in the plane of the joint.
+        let mk = |z: f64, phi_deg: f64| MultiBranchSpec {
+            r: 25.0,
+            z,
+            phi: phi_deg.to_radians(),
+            psi: 0.0,
+        };
+        let circ = std::f64::consts::TAU * 50.0;
+        let u_crown = 50.0 * -std::f64::consts::FRAC_PI_2;
+        // Isolated footprint of one brace, measured on the crown generatrix.
+        // Recomputed alone on purpose: as soon as two openings overlap the
+        // payload only carries their merged envelope.
+        let span = |spec: MultiBranchSpec| {
+            let solo = multi(&MultiInput { r1: 50.0, branches: vec![spec], n_samples: 720 });
+            super::span_at_u(&solo.holes[0].pts, u_crown, circ).unwrap()
+        };
+
+        // Concurrent axes (e = 0): a real gap between the two footprints.
+        let concurrent = multi(&MultiInput {
+            r1: 50.0,
+            branches: vec![mk(0.0, 45.0), mk(0.0, 135.0)],
+            n_samples: 720,
+        });
+        let p = concurrent.pairs[0];
+        assert!(p.eccentricity.unwrap().abs() < 1e-9);
+        assert!(p.overlap_pct.is_none(), "axes concourants : aucun recouvrement");
+        let g = p.gap.expect("jeu attendu");
+        let (s0, s1) = (span(mk(0.0, 45.0)), span(mk(0.0, 135.0)));
+        // Footprint 1 sits BELOW footprint 0 here (each brace pierces on its
+        // own side), so the gap is the distance between the facing lips.
+        let expected = (s1.0 - s0.1).max(s0.0 - s1.1);
+        assert!((g - expected).abs() < 1e-9, "jeu {g} ≠ écart des empreintes {expected}");
+        assert!(g > 1.0, "un vrai jeu est attendu : {g}");
+
+        // Offset the braces towards each other: the footprints overlap and
+        // λov appears, read on the lower-priority (overlapping) brace.
+        let offset = multi(&MultiInput {
+            r1: 50.0,
+            branches: vec![mk(-30.0, 45.0), mk(30.0, 135.0)],
+            n_samples: 720,
+        });
+        let q = offset.pairs[0];
+        assert!(q.gap.is_none(), "recouvrement : pas de jeu");
+        let ov = q.overlap_pct.expect("λov attendu");
+        let (t0, t1) = (span(mk(-30.0, 45.0)), span(mk(30.0, 135.0)));
+        let qlen = t0.1.min(t1.1) - t0.0.max(t1.0);
+        let plen = t1.1 - t1.0;
+        assert!(
+            (ov - 100.0 * qlen / plen).abs() < 1e-9,
+            "λov {ov} ≠ q/p mesuré ({} / {})",
+            qlen,
+            plen
+        );
+        assert!(ov > 20.0 && ov < 100.0, "λov hors du plausible : {ov}");
+        // And the eccentricity that produced it is the closed form.
+        assert!((q.eccentricity.unwrap() - 30.0).abs() < 1e-9);
     }
 
     /// Shoelace area of a closed developed loop.
