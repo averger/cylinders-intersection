@@ -1341,12 +1341,16 @@
       {
         const origin = new THREE.Vector3(0, b.z, 0);
         const rArc = Math.max(r1 * 1.35, 52) * (1 + 0.17 * i);
-        const sinP = Math.sin(b.psi), cosP = Math.cos(b.psi);
-        // φ: sweep from the main axis (+Z math) to the branch axis, in
-        // their common plane — math dir(s) = cos s·e_z + sin s·(sinψ, −cosψ, 0).
+        // φ: sweep from the main axis (+Z math) to the branch axis, inside
+        // their common plane.  That plane is read off the axis ITSELF — the
+        // matrix-built frame is the single source of truth, so the cote can
+        // never drift from the geometry it measures.
+        const nh = new THREE.Vector3(fr.d.x, fr.d.y, 0);
+        if (nh.lengthSq() < 1e-12) nh.set(0, -1, 0); // φ ≈ 0: plane undefined
+        nh.normalize();
         annotGroup!.add(tag(angleSector(
             origin,
-            (s) => new THREE.Vector3(sinP * Math.sin(s), Math.cos(s), cosP * Math.sin(s)),
+            (s) => m2t(Math.sin(s) * nh.x, Math.sin(s) * nh.y, Math.cos(s)),
             b.phi,
             rArc * 0.6,
             rArc,
@@ -1362,11 +1366,9 @@
           pos: origin
             .clone()
             .add(
-              new THREE.Vector3(
-                sinP * Math.sin(midP),
-                Math.cos(midP),
-                cosP * Math.sin(midP),
-              ).multiplyScalar(rArc * 0.82),
+              m2t(Math.sin(midP) * nh.x, Math.sin(midP) * nh.y, Math.cos(midP)).multiplyScalar(
+                rArc * 0.82,
+              ),
             ),
           color: "var(--ember)",
           dy: 0,
@@ -1375,6 +1377,7 @@
         // reference — math dir(s) = (sgn·sin s, −cos s, 0).
         if (Math.abs(b.psi) > 0.01) {
           const sgn = Math.sign(b.psi);
+          // Sweeps the ψ = 0 reference onto nh, in the horizontal plane.
           annotGroup!.add(tag(angleSector(
               origin,
               (s) => new THREE.Vector3(sgn * Math.sin(s), 0, Math.cos(s)),
@@ -1442,13 +1445,11 @@
       const den = pr.same_side ? Math.sin(b2.phi - a.phi) : Math.sin(a.phi + b2.phi);
       if (Math.abs(den) < 1e-9) continue;
       const t = ((b2.z - a.z) * Math.sin(b2.phi)) / den;
-      // Math coords: C_a + t·d_a, then map to three (x, z, −y).
-      const da = new THREE.Vector3(
-        Math.sin(a.phi) * Math.sin(a.psi),
-        -Math.sin(a.phi) * Math.cos(a.psi),
-        Math.cos(a.phi),
-      );
-      const cross = m2t(t * da.x, t * da.y, a.z + t * da.z);
+      // Crossing point on the axis of branch i, walked along the SAME
+      // matrix-built frame the mesh uses: C_a + t·d_a (math coords).
+      const fa = branchFrame(a);
+      const pm = fa.c.clone().addScaledVector(fa.d, t);
+      const cross = m2t(pm.x, pm.y, pm.z);
       const onAxis = new THREE.Vector3(0, cross.y, 0);
       annotGroup.add(tag(axisLine(onAxis, cross, pal.axisMain), "axis"));
       const dot = new THREE.Mesh(
