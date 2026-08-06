@@ -182,6 +182,10 @@ class AppStore {
   theme = $state<Theme>("light");
   /** 3D layer visibility (persisted, shared by all studies). */
   show3d = $state<Show3D>(defaultShow3D());
+  /** Auto-rotation of the 3D scene (not persisted). */
+  autoRotate = $state(true);
+  /** Bumped to ask the 3D viewer for a PNG capture. */
+  pngTick = $state(0);
 
   result = $state<IntersectionPayload | null>(null);
   multiResult = $state<MultiPayload | null>(null);
@@ -272,6 +276,10 @@ class AppStore {
   toggleTheme() {
     this.theme = this.theme === "light" ? "dark" : "light";
     this.persist();
+  }
+
+  requestPng() {
+    this.pngTick += 1;
   }
 
   toggle3d(key: keyof Show3D) {

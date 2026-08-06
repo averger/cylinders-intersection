@@ -18,8 +18,8 @@
 import { chromium } from "playwright-core";
 import { writeFileSync } from "node:fs";
 
-const W = 1280;
-const H = 720;
+const W = 1920;
+const H = 1080;
 
 const b = await chromium.launch({
   executablePath: "/opt/pw-browsers/chromium",
@@ -73,8 +73,8 @@ await pg.waitForTimeout(2200); // gabarits 2D tracés
 await pg.evaluate(() => {
   const cur = document.createElement("div");
   cur.style.cssText =
-    "position:fixed;left:-50px;top:-50px;width:15px;height:15px;border-radius:50%;" +
-    "background:rgba(224,76,13,0.30);border:1.5px solid #e04c0d;pointer-events:none;" +
+    "position:fixed;left:-50px;top:-50px;width:20px;height:20px;border-radius:50%;" +
+    "background:rgba(224,76,13,0.30);border:2px solid #e04c0d;pointer-events:none;" +
     "z-index:99999;transform:translate(-50%,-50%)";
   document.body.appendChild(cur);
   addEventListener(
@@ -96,10 +96,10 @@ await pg.evaluate(() => {
   cap.id = "__cap";
   // Sous l'en-tête, centré : zone vide en 2D comme en 3D.
   cap.style.cssText =
-    "position:fixed;left:50%;top:92px;transform:translateX(-50%);z-index:99999;" +
-    "font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:0.04em;" +
+    "position:fixed;left:50%;top:96px;transform:translateX(-50%);z-index:99999;" +
+    "font-family:'JetBrains Mono',monospace;font-size:17px;letter-spacing:0.04em;" +
     "color:#1b1b1f;background:rgba(255,255,255,0.94);border:1px solid rgba(0,0,0,0.10);" +
-    "padding:7px 16px;border-radius:999px;box-shadow:0 4px 18px rgba(20,20,25,0.10);" +
+    "padding:9px 20px;border-radius:999px;box-shadow:0 4px 18px rgba(20,20,25,0.10);" +
     "opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap";
   document.body.appendChild(cap);
   window.__cap = (t) => {
@@ -158,8 +158,8 @@ await clickView("3D");
 await pg.waitForTimeout(1200);
 await cap("Cyl / Cyl · on tourne la pièce");
 mark("orbite");
-const cx = 800;
-const cy = 380;
+const cx = 1180;
+const cy = 560;
 await pg.mouse.move(cx, cy);
 await pg.mouse.down();
 await pg.mouse.move(cx + 140, cy - 40, { steps: 12 });

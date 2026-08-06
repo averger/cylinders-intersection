@@ -75,7 +75,6 @@
         step={0.5}
         value={p.d1}
         decimals={2}
-        hint="cote extérieure du tube : le gabarit s'enroule à l'extérieur"
         onchange={(v) => {
           // Un piquage plus gros que le tube principal traverse de part en
           // part : hors du domaine gueule de loup — on borne Ø₂ à Ø₁.
@@ -96,7 +95,6 @@
           max={p.d1}
           step={0.5}
           value={p.d2}
-          hint="au plus égal à Ø₁"
           decimals={2}
           onchange={(v) => {
             store.params = { ...store.params, d2: v };
@@ -113,7 +111,6 @@
           step={0.5}
           value={p.angleDeg}
           decimals={1}
-          hint={p.mode === "cyl_plane" ? "bascule du plan autour de l'axe X" : undefined}
           onchange={(v) => {
             store.params = { ...store.params, angleDeg: v };
             store.compute();
@@ -123,10 +120,7 @@
 
       {#if p.mode === "cyl_plane"}
         <div class="flex items-center justify-between -mt-1">
-          <div class="flex flex-col">
-            <span class="text-[10px] uppercase tracking-[0.18em] text-ash">Plan orienté</span>
-            <span class="text-[10px] text-ash/70">second angle φy</span>
-          </div>
+          <span class="text-[10px] uppercase tracking-[0.18em] text-ash">Second angle φy</span>
           <Switch
             checked={showPhiY}
             label="Plan orienté — second angle φy"
@@ -148,7 +142,6 @@
             step={0.5}
             value={p.angleYDeg}
             decimals={1}
-            hint="déphase le gabarit autour du tube — caler sur la génératrice 0°"
             onchange={(v) => {
               store.params = { ...store.params, angleYDeg: v };
               store.compute();
@@ -166,7 +159,6 @@
           step={0.5}
           value={p.z0}
           decimals={1}
-          hint="Hauteur de coupe sur l'axe du tube"
           onchange={(v) => {
             store.params = { ...store.params, z0: v };
             store.compute();
@@ -182,9 +174,7 @@
             <span class="text-[10px] uppercase tracking-[0.18em] text-ash">
               Piquages ({p.branches.length})
             </span>
-            <span class="text-[10px] text-ash/70">
-              l'ordre donne la priorité : un piquage meurt sur ceux au-dessus
-            </span>
+            <span class="text-[10px] text-ash/70">l'ordre donne la priorité</span>
           </div>
           <button
             class="text-[11px] text-ember hover:text-ember-soft transition-colors font-medium disabled:opacity-40"
@@ -227,7 +217,6 @@
               step={1}
               value={b.z}
               decimals={0}
-              hint="0 = axe au centre du tube · décale le point de croisement"
               onchange={(v) => patchBranch(i, { z: v })}
             />
             <Slider
@@ -238,7 +227,6 @@
               step={0.5}
               value={b.angleDeg}
               decimals={1}
-              hint="depuis l'axe principal — > 90° : penche vers le bas"
               onchange={(v) => patchBranch(i, { angleDeg: v })}
             />
             <Slider
@@ -249,7 +237,6 @@
               step={1}
               value={b.azimutDeg}
               decimals={0}
-              hint="rotation autour du tube principal"
               onchange={(v) => patchBranch(i, { azimutDeg: v })}
             />
           </div>
@@ -257,12 +244,7 @@
 
         {#if store.multiResult && store.multiResult.pairs.length > 0}
           <div class="rounded-xl border border-mist bg-carbon/30 p-3 space-y-2">
-            <div class="flex flex-col">
-              <span class="text-[10px] uppercase tracking-[0.18em] text-ash">Nœud</span>
-              <span class="text-[10px] text-ash/70">
-                excentrement, jeu ou recouvrement — les cotes du bureau d'études
-              </span>
-            </div>
+            <span class="text-[10px] uppercase tracking-[0.18em] text-ash">Nœud</span>
             {#each store.multiResult.pairs as pr (`${pr.i}-${pr.j}`)}
               <div class="space-y-1 text-[11px]">
                 <div class="flex justify-between">
@@ -316,11 +298,6 @@
             store.compute();
           }}
         />
-        <p class="text-[10px] text-ash/70 leading-relaxed">
-          Côté d'où arrive le tube incliné : <b>extérieure</b> = il s'appuie sur le
-          gros tube et s'arrête au premier contact (piquage en selle, le cas
-          courant) ; <b>intérieure</b> = il arrive du côté opposé — gabarit miroir.
-        </p>
       </section>
     {/if}
 

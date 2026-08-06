@@ -48,7 +48,7 @@ for name in ORDER:
     out = f"seg/{name}.mp4"
     subprocess.run(
         [FF, "-v", "error", "-y", "-ss", f"{a:.3f}", "-to", f"{b:.3f}", "-i", RAW,
-         "-vf", f"fps=30,setpts=PTS/{k:.6f},fps=30,format=yuv420p", "-an",
+         "-vf", f"fps=30,setpts=PTS/{k:.6f},fps=30,scale=1280:720:flags=lanczos,format=yuv420p", "-an",
          "-c:v", "libx264", "-preset", "slow", "-crf", "19", out],
         check=True,
     )

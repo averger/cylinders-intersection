@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as THREE from "three";
   import { onMount } from "svelte";
-  import { store, type Show3D } from "../lib/store.svelte";
+  import { store } from "../lib/store.svelte";
   import type { DevPoint, IntersectionPayload, MultiPayload } from "../lib/api";
 
   let container = $state<HTMLDivElement | undefined>(undefined);
@@ -109,7 +109,6 @@
   let dragging = false;
   let lastX = 0,
     lastY = 0;
-  let autoRotate = $state(true);
   let capturing = $state(false);
 
   /** Theme-dependent scene colors. */
@@ -1495,7 +1494,7 @@
   }
 
   function tick() {
-    if (autoRotate && !dragging) {
+    if (store.autoRotate && !dragging) {
       theta += 0.0022;
       setCamera();
     }
@@ -1625,7 +1624,7 @@
 
     el.addEventListener("pointerdown", (e: PointerEvent) => {
       dragging = true;
-      autoRotate = false;
+      store.autoRotate = false;
       el.setPointerCapture(e.pointerId);
       el.style.cursor = "grabbing";
       lastX = e.clientX;
@@ -1700,26 +1699,15 @@
     applyVisibility();
   });
 
-  let showDisplayPanel = $state(false);
-  const displayRows = $derived(
-    [
-      { key: "main", label: "tube principal" },
-      {
-        key: "cutters",
-        label:
-          store.params.mode === "multi"
-            ? "piquages"
-            : store.params.mode === "cyl_plane"
-              ? "plan de coupe"
-              : "tube incliné",
-      },
-      { key: "curves", label: "courbes de coupe" },
-      { key: "angles", label: "angles φ · ψ" },
-      { key: "labels", label: "étiquettes Ø" },
-      { key: "axes", label: "axes · cotes Ø" },
-      { key: "grid", label: "grille" },
-    ] as { key: keyof Show3D; label: string }[],
-  );
+  // Capture PNG demandée depuis l'en-tête (menu Exporter).
+  let lastPngTick = 0;
+  $effect(() => {
+    const tick = store.pngTick;
+    if (tick !== lastPngTick) {
+      lastPngTick = tick;
+      if (tick > 0) capturePNG();
+    }
+  });
 </script>
 
 <div class="absolute inset-0">
@@ -1730,7 +1718,6 @@
   <!-- Orientation triad (math axes: Z along the main tube) -->
   <div class="absolute right-4 bottom-4 pointer-events-none">
     <svg bind:this={triadEl} viewBox="0 0 68 68" class="w-[68px] h-[68px]">
-      <circle cx="34" cy="34" r="32" style="fill: var(--panel); stroke: var(--line-2)" stroke-width="1" />
       {#each TRIAD_AXES as a (a.label)}
         <line x1="34" y1="34" x2="34" y2="34" stroke={a.color} stroke-width="2" stroke-linecap="round" />
       {/each}
@@ -1746,65 +1733,6 @@
         >
       {/each}
     </svg>
-  </div>
-
-  <!-- Display layers panel -->
-  {#if showDisplayPanel}
-    <div
-      class="absolute left-4 bottom-14 z-10 rounded-xl border border-mist p-2 min-w-[190px] shadow-xl"
-      style="background: var(--bg-2); backdrop-filter: none"
-    >
-      {#each displayRows as row (row.key)}
-        <button
-          class="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-carbon/60 transition-colors text-left"
-          onclick={() => store.toggle3d(row.key)}
-          aria-pressed={store.show3d[row.key]}
-        >
-          <span
-            class="w-3 h-3 rounded-[4px] border transition-colors shrink-0"
-            style={store.show3d[row.key]
-              ? "background: var(--ember); border-color: var(--ember)"
-              : "border-color: var(--line-2)"}
-          ></span>
-          <span
-            class="text-[10px] uppercase tracking-[0.14em] {store.show3d[row.key]
-              ? 'text-silver'
-              : 'text-ash/60'}">{row.label}</span
-          >
-        </button>
-      {/each}
-    </div>
-  {/if}
-
-  <!-- Bottom toolbar -->
-  <div class="absolute left-4 bottom-4 flex items-center gap-2">
-    <button
-      class="pill hover:border-mist transition-colors {showDisplayPanel ? 'text-pearl' : ''}"
-      style={showDisplayPanel
-        ? "border-color: color-mix(in srgb, var(--ember) 45%, transparent)"
-        : ""}
-      onclick={() => (showDisplayPanel = !showDisplayPanel)}
-      aria-pressed={showDisplayPanel}
-      aria-label="Afficher ou masquer des éléments de la scène"
-    >
-      ◧ affichage
-    </button>
-    <button
-      class="pill hover:border-mist transition-colors {autoRotate ? 'text-pearl' : ''}"
-      style={autoRotate ? "border-color: color-mix(in srgb, var(--ember) 45%, transparent)" : ""}
-      onclick={() => (autoRotate = !autoRotate)}
-      aria-pressed={autoRotate}
-    >
-      ⟳ rotation {autoRotate ? "on" : "off"}
-    </button>
-    <button
-      class="pill hover:border-mist transition-colors"
-      onclick={capturePNG}
-      disabled={capturing}
-      aria-label="Capturer la scène en PNG 1920×1080"
-    >
-      ◉ png · 1920×1080
-    </button>
   </div>
 
   <!-- Loading shimmer -->

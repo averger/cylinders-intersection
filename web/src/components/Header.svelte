@@ -2,16 +2,18 @@
   // Compact tool header: brand, view toggle, options, actions.
   import Segmented from "./Segmented.svelte";
   import OptionsMenu from "./OptionsMenu.svelte";
+  import DisplayMenu from "./DisplayMenu.svelte";
   import { store, type View } from "../lib/store.svelte";
   import { editor } from "../lib/editor.svelte";
 
   let exportMenu = $state(false);
 
-  function pick(kind: "pdf" | "dxf" | "stl") {
+  function pick(kind: "pdf" | "dxf" | "stl" | "png") {
     exportMenu = false;
     if (kind === "pdf") editor.exportPdf();
     else if (kind === "dxf") editor.exportDxf();
-    else editor.exportStl();
+    else if (kind === "stl") editor.exportStl();
+    else store.requestPng();
   }
 
   function clickOutside(node: HTMLElement) {
@@ -34,17 +36,11 @@
       <span class="relative grid place-items-center w-9 h-9">
         <!-- Cylix mark: the development sinusoid on its tile -->
         <svg viewBox="0 0 96 96" class="w-9 h-9" fill="none" aria-hidden="true">
-          <defs>
-            <linearGradient id="cylix-mark-g" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#FF7A33" />
-              <stop offset="1" stop-color="#E8500F" />
-            </linearGradient>
-          </defs>
-          <rect width="96" height="96" rx="24" fill="#16161A" />
+          <!-- La sinusoïde du développé, seule : lisible sur les deux thèmes. -->
           <path
             d="M16.0 48.0 L17.8 45.0 L19.6 42.2 L21.3 39.5 L23.1 37.1 L24.9 35.0 L26.7 33.3 L28.4 32.0 L30.2 31.3 L32.0 31.0 L33.8 31.3 L35.6 32.0 L37.3 33.3 L39.1 35.0 L40.9 37.1 L42.7 39.5 L44.4 42.2 L46.2 45.0 L48.0 48.0 L49.8 51.0 L51.6 53.8 L53.3 56.5 L55.1 58.9 L56.9 61.0 L58.7 62.7 L60.4 64.0 L62.2 64.7 L64.0 65.0 L65.8 64.7 L67.6 64.0 L69.3 62.7 L71.1 61.0 L72.9 58.9 L74.7 56.5 L76.4 53.8 L78.2 51.0 L80.0 48.0"
-            stroke="url(#cylix-mark-g)"
-            stroke-width="9"
+            stroke="var(--ember)"
+            stroke-width="10"
             stroke-linecap="round"
             stroke-linejoin="round"
           />
@@ -61,7 +57,11 @@
 
     <div class="mx-auto flex items-center gap-2">
       <Segmented options={viewOptions} value={store.view} onchange={(v) => store.setView(v)} />
-      <OptionsMenu />
+      {#if store.view === "3d"}
+        <DisplayMenu />
+      {:else}
+        <OptionsMenu />
+      {/if}
     </div>
 
     <div class="flex items-center gap-2 shrink-0">
@@ -152,6 +152,18 @@
                 Surfaces exactes en mm — Fusion 360, FreeCAD, impression 3D.
               </div>
             </button>
+            {#if store.view === "3d"}
+              <button
+                class="w-full text-left px-3.5 py-2.5 rounded-xl hover:bg-carbon transition-colors"
+                role="menuitem"
+                onclick={() => pick("png")}
+              >
+                <div class="text-[13.5px] font-medium text-pearl">PNG · vue 3D</div>
+                <div class="text-[11px] text-ash leading-snug mt-0.5">
+                  1920×1080, cotes et étiquettes composées dans l'image.
+                </div>
+              </button>
+            {/if}
           </div>
         {/if}
       </div>

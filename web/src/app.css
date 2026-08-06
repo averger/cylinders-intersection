@@ -247,7 +247,7 @@
     gap: 0.5rem;
     padding: 0.85rem 1.3rem;
     border-radius: var(--radius-pill);
-    background: linear-gradient(180deg, var(--ember-soft), var(--ember));
+    background: var(--ember);
     color: #fff;
     font-weight: 500;
     font-size: 0.95rem;
