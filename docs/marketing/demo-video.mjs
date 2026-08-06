@@ -1,20 +1,25 @@
 /**
- * Démo vidéo Cylix pour LinkedIn — cas cylindre / cylindre.
+ * Démo vidéo Cylix pour LinkedIn — cas cylindre / cylindre, avant / après.
  *
- * Scénario (~15 s) : on tourne la 3D, on passe Ø₂ de 100 à 80 mm
- * (0,8·Ø₁), on passe l'angle de 45° à 30°, puis on bascule en 2D pour
- * montrer que les deux gabarits ont suivi. Thème clair.
+ * Scénario (~15 s) :
+ *   1. les deux gabarits 2D AVANT modification (Ø₂ = Ø₁, 45°)
+ *   2. passage en 3D, on tourne la pièce
+ *   3. Ø₂ : 100 → 80 mm (0,8·Ø₁)
+ *   4. angle des axes : 45° → 30°
+ *   5. retour en 2D : les deux gabarits APRÈS, ils ont suivi
+ * Thème clair.
  *
  * Notes d'enregistrement : le rendu WebGL logiciel sature le thread
- * principal, donc chaque appel CDP coûte cher — on minimise les
- * allers-retours (mouse.move(…, {steps}) en un appel, curseur factice
- * suivi EN PAGE par un écouteur mousemove) et on enregistre en 720p.
+ * principal et chaque événement d'entrée déclenche un recalcul, donc on
+ * minimise les allers-retours CDP (mouse.move(…, {steps}) en un appel,
+ * curseur factice suivi EN PAGE) et on enregistre en 720p.  Les marques
+ * de phase sont écrites dans marks.json pour le montage.
  */
 import { chromium } from "playwright-core";
+import { writeFileSync } from "node:fs";
 
 const W = 1280;
 const H = 720;
-const OUT = "video-raw";
 
 const b = await chromium.launch({
   executablePath: "/opt/pw-browsers/chromium",
@@ -22,7 +27,7 @@ const b = await chromium.launch({
 });
 const ctx = await b.newContext({
   viewport: { width: W, height: H },
-  recordVideo: { dir: OUT, size: { width: W, height: H } },
+  recordVideo: { dir: "video-raw", size: { width: W, height: H } },
 });
 const t0 = Date.now();
 const pg = await ctx.newPage();
@@ -30,7 +35,7 @@ pg.setDefaultTimeout(60000);
 pg.on("pageerror", (e) => console.log("[STACK]", (e.stack || e.message).split("\n").slice(0, 5).join(" | ")));
 pg.on("crash", () => console.log("[CRASH]"));
 
-// État de départ : Cyl/Cyl, Ø₂ = Ø₁ = 100, 45°, thème clair, vue 3D.
+// État de départ : Cyl/Cyl, Ø₂ = Ø₁ = 100, 45°, thème clair, VUE 2D.
 await pg.addInitScript(() => {
   const study = {
     id: "s1",
@@ -57,12 +62,12 @@ await pg.addInitScript(() => {
   };
   localStorage.setItem(
     "cylix.studies.v1",
-    JSON.stringify({ studies: [study], activeId: "s1", view: "3d", theme: "light" }),
+    JSON.stringify({ studies: [study], activeId: "s1", view: "2d", theme: "light" }),
   );
 });
 
 await pg.goto("http://127.0.0.1:8787/", { waitUntil: "networkidle" });
-await pg.waitForTimeout(3000); // première scène 3D construite
+await pg.waitForTimeout(2200); // gabarits 2D tracés
 
 // --- curseur factice (suivi en page) + bandeau de légende --------------
 await pg.evaluate(() => {
@@ -72,7 +77,6 @@ await pg.evaluate(() => {
     "background:rgba(224,76,13,0.30);border:1.5px solid #e04c0d;pointer-events:none;" +
     "z-index:99999;transform:translate(-50%,-50%)";
   document.body.appendChild(cur);
-  // Suivi en page : zéro aller-retour pendant la chorégraphie.
   addEventListener(
     "mousemove",
     (e) => {
@@ -81,10 +85,18 @@ await pg.evaluate(() => {
     },
     true,
   );
+  // La pastille « calcul… » est un état réel de l'app, mais ici le rendu
+  // logiciel la fait clignoter en permanence alors qu'avec un GPU le calcul
+  // est imperceptible : on la masque pour que la démo reste représentative.
+  const st = document.createElement("style");
+  st.textContent = ".pill.glass-strong { display: none !important }";
+  document.head.appendChild(st);
+
   const cap = document.createElement("div");
   cap.id = "__cap";
+  // Sous l'en-tête, centré : zone vide en 2D comme en 3D.
   cap.style.cssText =
-    "position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:99999;" +
+    "position:fixed;left:50%;top:92px;transform:translateX(-50%);z-index:99999;" +
     "font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:0.04em;" +
     "color:#1b1b1f;background:rgba(255,255,255,0.94);border:1px solid rgba(0,0,0,0.10);" +
     "padding:7px 16px;border-radius:999px;box-shadow:0 4px 18px rgba(20,20,25,0.10);" +
@@ -99,6 +111,10 @@ await pg.evaluate(() => {
 });
 
 const cap = (t) => pg.evaluate((t2) => window.__cap(t2), t);
+const marks = {};
+const mark = (name) => {
+  marks[name] = (Date.now() - t0) / 1000;
+};
 
 /** Glisse un curseur à la souris jusqu'à `target`, puis cale la valeur exacte. */
 async function dragSlider(index, target, chunks, pauseMs) {
@@ -107,14 +123,13 @@ async function dragSlider(index, target, chunks, pauseMs) {
   const min = parseFloat(await el.getAttribute("min"));
   const max = parseFloat(await el.getAttribute("max"));
   const value = parseFloat(await el.inputValue());
-  const thumb = 15; // le pouce est centré sur la valeur
+  const thumb = 15;
   const px = (v) => box.x + thumb / 2 + ((v - min) / (max - min)) * (box.width - thumb);
   const y = box.y + box.height / 2;
   await pg.mouse.move(px(value), y);
   await pg.mouse.down();
   for (let k = 1; k <= chunks; k++) {
-    const v = value + ((target - value) * k) / chunks;
-    await pg.mouse.move(px(v), y, { steps: 5 });
+    await pg.mouse.move(px(value + ((target - value) * k) / chunks), y, { steps: 5 });
     await pg.waitForTimeout(pauseMs);
   }
   await pg.mouse.up();
@@ -125,48 +140,56 @@ async function dragSlider(index, target, chunks, pauseMs) {
   }, target);
 }
 
-const tStart = Date.now();
-const t = () => ((Date.now() - tStart) / 1000).toFixed(2);
+const clickView = async (name) => {
+  const btn = pg.getByRole("button", { name, exact: true });
+  const bb = await btn.boundingBox();
+  await pg.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2, { steps: 6 });
+  await btn.click();
+};
 
-// --- 1. on joue avec la 3D : rotation auto, puis orbite à la souris
-await cap("Cyl / Cyl · Ø₂ = Ø₁ · 45°");
-await pg.waitForTimeout(900);
+// --- 1. AVANT : les deux gabarits, Ø₂ = Ø₁, 45° ------------------------
+mark("avant");
+await cap("avant · Ø₂ = Ø₁ · 45°");
+await pg.waitForTimeout(1600);
+
+// --- 2. passage en 3D, on tourne la pièce -----------------------------
+mark("vers3d");
+await clickView("3D");
+await pg.waitForTimeout(1200);
+await cap("Cyl / Cyl · on tourne la pièce");
+mark("orbite");
 const cx = 800;
 const cy = 380;
 await pg.mouse.move(cx, cy);
 await pg.mouse.down();
-await pg.mouse.move(cx + 130, cy - 45, { steps: 14 });
-await pg.mouse.move(cx + 210, cy + 25, { steps: 12 });
-await pg.mouse.move(cx + 90, cy - 10, { steps: 12 });
+await pg.mouse.move(cx + 140, cy - 40, { steps: 12 });
+await pg.mouse.move(cx + 200, cy + 20, { steps: 10 });
 await pg.mouse.up();
-console.log("orbite", t());
 
-// --- 2. Ø₂ : 100 → 80 mm (0,8·Ø₁)
+// --- 3. Ø₂ : 100 → 80 mm (0,8·Ø₁) -------------------------------------
+mark("diametre");
 await cap("Ø₂ : 100 → 80 mm");
-await dragSlider(1, 80, 6, 120);
-console.log("diamètre", t());
+await dragSlider(1, 80, 6, 110);
 
-// --- 3. angle : 45° → 30°
+// --- 4. angle : 45° → 30° ---------------------------------------------
+mark("angle");
 await cap("angle des axes : 45° → 30°");
-await dragSlider(2, 30, 5, 120);
-await pg.waitForTimeout(250);
-console.log("angle", t());
+await dragSlider(2, 30, 5, 110);
+await pg.waitForTimeout(200);
 
-// --- 4. bascule 2D : les gabarits ont suivi
-await cap("les deux gabarits suivent · échelle 1:1");
-const twoD = pg.getByRole("button", { name: "2D", exact: true });
-const bb = await twoD.boundingBox();
-await pg.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2, { steps: 8 });
-await twoD.click();
-await pg.waitForTimeout(1400);
-await pg.mouse.move(700, 460, { steps: 4 });
-await pg.mouse.wheel(0, 260);
-await pg.waitForTimeout(1200);
+// --- 5. APRÈS : retour 2D, les gabarits ont suivi ----------------------
+mark("clic2d");
+await cap("après · les gabarits ont suivi");
+await clickView("2D");
+await pg.waitForTimeout(1500);
+mark("apres");
+await pg.waitForTimeout(1800);
 await cap("");
-await pg.waitForTimeout(250);
-console.log("2D", t());
+await pg.waitForTimeout(300);
+mark("fin");
 
-console.log("OFFSET_MS", tStart - t0, "CHOREO_MS", Date.now() - tStart);
+writeFileSync("marks.json", JSON.stringify(marks, null, 1));
+console.log(JSON.stringify(marks));
 await ctx.close();
 await b.close();
 console.log("done");
