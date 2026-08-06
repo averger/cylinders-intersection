@@ -9,11 +9,15 @@
  *   5. retour en 2D : les deux gabarits APRÈS, ils ont suivi
  * Thème clair.
  *
+ * Aucun sous-titre : la démo se lit sur les valeurs du panneau et la forme
+ * des gabarits.
+ *
  * Notes d'enregistrement : le rendu WebGL logiciel sature le thread
  * principal et chaque événement d'entrée déclenche un recalcul, donc on
  * minimise les allers-retours CDP (mouse.move(…, {steps}) en un appel,
- * curseur factice suivi EN PAGE) et on enregistre en 720p.  Les marques
- * de phase sont écrites dans marks.json pour le montage.
+ * curseur factice suivi EN PAGE).  On filme en 1920×1080, la taille pour
+ * laquelle l'app est dessinée, et on réduit à l'encodage.  Les marques de
+ * phase sont écrites dans marks.json pour le montage.
  */
 import { chromium } from "playwright-core";
 import { writeFileSync } from "node:fs";
@@ -69,7 +73,7 @@ await pg.addInitScript(() => {
 await pg.goto("http://127.0.0.1:8787/", { waitUntil: "networkidle" });
 await pg.waitForTimeout(2200); // gabarits 2D tracés
 
-// --- curseur factice (suivi en page) + bandeau de légende --------------
+// --- curseur factice, suivi en page (Playwright ne filme pas le pointeur)
 await pg.evaluate(() => {
   const cur = document.createElement("div");
   cur.style.cssText =
@@ -92,25 +96,8 @@ await pg.evaluate(() => {
   st.textContent = ".pill.glass-strong { display: none !important }";
   document.head.appendChild(st);
 
-  const cap = document.createElement("div");
-  cap.id = "__cap";
-  // Sous l'en-tête, centré : zone vide en 2D comme en 3D.
-  cap.style.cssText =
-    "position:fixed;left:50%;top:96px;transform:translateX(-50%);z-index:99999;" +
-    "font-family:'JetBrains Mono',monospace;font-size:17px;letter-spacing:0.04em;" +
-    "color:#1b1b1f;background:rgba(255,255,255,0.94);border:1px solid rgba(0,0,0,0.10);" +
-    "padding:9px 20px;border-radius:999px;box-shadow:0 4px 18px rgba(20,20,25,0.10);" +
-    "opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap";
-  document.body.appendChild(cap);
-  window.__cap = (t) => {
-    const c = document.getElementById("__cap");
-    if (!c) return;
-    c.style.opacity = t ? "1" : "0";
-    if (t) c.textContent = t;
-  };
 });
 
-const cap = (t) => pg.evaluate((t2) => window.__cap(t2), t);
 const marks = {};
 const mark = (name) => {
   marks[name] = (Date.now() - t0) / 1000;
@@ -149,14 +136,12 @@ const clickView = async (name) => {
 
 // --- 1. AVANT : les deux gabarits, Ø₂ = Ø₁, 45° ------------------------
 mark("avant");
-await cap("avant · Ø₂ = Ø₁ · 45°");
 await pg.waitForTimeout(1600);
 
 // --- 2. passage en 3D, on tourne la pièce -----------------------------
 mark("vers3d");
 await clickView("3D");
 await pg.waitForTimeout(1200);
-await cap("Cyl / Cyl · on tourne la pièce");
 mark("orbite");
 const cx = 1180;
 const cy = 560;
@@ -168,23 +153,19 @@ await pg.mouse.up();
 
 // --- 3. Ø₂ : 100 → 80 mm (0,8·Ø₁) -------------------------------------
 mark("diametre");
-await cap("Ø₂ : 100 → 80 mm");
 await dragSlider(1, 80, 6, 110);
 
 // --- 4. angle : 45° → 30° ---------------------------------------------
 mark("angle");
-await cap("angle des axes : 45° → 30°");
 await dragSlider(2, 30, 5, 110);
 await pg.waitForTimeout(200);
 
 // --- 5. APRÈS : retour 2D, les gabarits ont suivi ----------------------
 mark("clic2d");
-await cap("après · les gabarits ont suivi");
 await clickView("2D");
 await pg.waitForTimeout(1500);
 mark("apres");
 await pg.waitForTimeout(1800);
-await cap("");
 await pg.waitForTimeout(300);
 mark("fin");
 

@@ -8,7 +8,10 @@ monte à 15 s.
 Scénario : les deux gabarits 2D **avant** modification (Ø₂ = Ø₁, 45°), passage
 en 3D et rotation de la pièce, Ø₂ de 100 à 80 mm (0,8·Ø₁), angle des axes de
 45° à 30°, retour en 2D pour montrer les gabarits **après**. Thème clair,
-1280×720, H.264.
+**aucun sous-titre** : la démo se lit sur les valeurs du panneau et la forme
+des gabarits. Filmée en 1920×1080, la taille pour laquelle l'app est dessinée,
+et réduite à 1280×720 à l'encodage — filmer directement en 720p grossit tout
+d'un tiers, les éléments d'interface étant à taille fixe.
 
 ```bash
 cargo build --release && ./target/release/cylix &   # serveur sur :8787
